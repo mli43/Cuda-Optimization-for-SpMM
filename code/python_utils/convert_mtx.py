@@ -47,6 +47,7 @@ def process_mtx(directory):
                     print(f"Processing {mtx_file_path}...")
                     matrix = mmread(mtx_file_path).tocsr()
                     matrix_csc = mmread(mtx_file_path).tocsc()
+                    matrix_coo = mmread(mtx_file_path).tocoo()
                 except Exception as e:
                     print(f"Error reading or converting {mtx_file_path}: {e}")
                     continue
@@ -55,6 +56,7 @@ def process_mtx(directory):
                 base_name = os.path.splitext(file)[0]
                 csr_file_path = os.path.join(root, f"{base_name}.csr")
                 csc_file_path = os.path.join(root, f"{base_name}.csc")
+                coo_file_path = os.path.join(root, f"{base_name}.coo")
                 
                 # Save the CSR matrix in the specified format
                 try:
@@ -97,6 +99,27 @@ def process_mtx(directory):
                         out_file.write(" ".join(map(str, values)) + "\n")
                     
                     print(f"Saved CSC format to {csc_file_path}")
+                    
+                    with open(coo_file_path, "w") as out_file:
+                        # Line 1: Number of rows, columns, and non-zero elements
+                        rows, cols = matrix_coo.shape
+                        nnz = matrix_coo.nnz
+                        out_file.write(f"{rows} {cols} {nnz}\n")
+                        
+                        rows, cols, values = matrix_coo.row, matrix_coo.col, matrix_coo.data
+
+                        # Sort by row, then by column (row-major order)
+                        sorted_indices = np.lexsort((cols, rows))  # Sort by rows, then by cols
+                        rows = rows[sorted_indices]
+                        cols = cols[sorted_indices]
+                        values = values[sorted_indices]
+                        
+                        for r, c, v in zip(rows, cols, values):
+                            out_file.write(f"{r} {c} {v}\n")
+    
+                    print(f"Saved COO format to {coo_file_path}")
+                    
+                        
                 except Exception as e:
                     print(f"Error writing to {csr_file_path}: {e}")
 

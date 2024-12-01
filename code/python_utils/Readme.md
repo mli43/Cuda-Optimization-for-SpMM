@@ -4,7 +4,7 @@
 
 `python convert_mtx.py <directory>`: 
 1. This script converts all `dense.mtx` matrices in the subdirectories of supplied directory into dense matrix representation. Stored as `dense.in` at the same subdirectory where `dense.mtx` is found. 
-2. This function converts all `*.mtx` that is not `dense.mtx` in the subdirectories of supplied directory into CSR and CSC matrix representation. Stored as `filename.csr` or `filename.csc` at the  same subdirectory where `filename.mtx` is found.
+2. This script converts all `*.mtx` that is not `dense.mtx` in the subdirectories of supplied directory into CSR, CSC, and row-major COO matrix representation. Stored as `filename.csr`, `filename.csc`, or `filename.coo` at the same subdirectory where `filename.mtx` is found.
 
 ## File formats
 `*.mtx`: These are the files stored in matrix market format. See [Matrix Market](https://math.nist.gov/MatrixMarket/formats.html).
@@ -49,4 +49,22 @@ rows cols num-non-zeros
 col_ptr: indicate where each col starts and ends in values. Size = col + 1
 row_idx: stores row indices of non-zero elements. Size = num-non-zeros 
 values: stores non-zero elemenet values. Size = num-non-zeros 
+```
+
+`*.coo`: These are files stored in COO matrix format. The files are stored in the format below
+```
+rows cols num-non-zeros
+row_idx0 col_idx0 value0
+row_idx1 col_idx1 value1
+...
+```
+
+EXAMPLE: In the above example
+```
+5 5 10
+0 0 a
+0 1 b
+0 2 c
+1 2 d
+...
 ```
