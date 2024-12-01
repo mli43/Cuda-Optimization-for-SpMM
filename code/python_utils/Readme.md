@@ -1,4 +1,4 @@
-# Usage
+# Usage and Documentation
 
 ## Script usages
 
@@ -6,10 +6,15 @@
 1. This script converts all `dense.mtx` matrices in the subdirectories of supplied directory into dense matrix representation. Stored as `dense.in` at the same subdirectory where `dense.mtx` is found. 
 2. This script converts all `*.mtx` that is not `dense.mtx` in the subdirectories of supplied directory into CSR, CSC, and row-major COO matrix representation. Stored as `filename.csr`, `filename.csc`, or `filename.coo` at the same subdirectory where `filename.mtx` is found.
 
+`python validate.py <directory>`:
+1. This script will validate `result.out` file in the subdirectories with `result.expect` in that subdirectory. If `result.expect` is not found, then it will open `*.mtx` and `dense.in` in that subdirectory, matrix multiply using scipy functions, and save the expected matrix to `result.expect`.
+
 ## File formats
+### mtx files
 `*.mtx`: These are the files stored in matrix market format. See [Matrix Market](https://math.nist.gov/MatrixMarket/formats.html).
 
-`dense.in`: These are matrices stored in dense matrix format. The files are stored in the formar below:
+### dense.in
+`dense.in`: These are input dense matrices stored in dense matrix format. The files are stored in the format below.
 ```
 rows cols num-non-zeros
 val(0,0) val(0,1) ...
@@ -25,6 +30,23 @@ EXAMPLE:
 ...
 ```
 
+### result.out and result.expect
+`result.out`: These are matrix multiplication results stored in dense matrix format. The files are stored in the format below.
+`result.expect`: These are EXPECTED matrix multiplication results calculated with scipy stored in dense matrix format. The files are stored in the format below.
+```
+val(0,0) val(0,1) ...
+val(1,0) val(1,1) ...
+...
+```
+
+EXAMPLE:
+```
+1 0 3 0 5 0 7 0 9 0    # values for row 0
+0 2 0 4 0 6 0 8 0 10    # values for row 1
+...
+```
+
+### CSR files
 `*.csr`: These are files stored in CSR matrix format. The files are stored in the format below
 ```
 rows cols num-non-zeros
@@ -42,15 +64,7 @@ a b c d e f g h i j     # Our data will all be numbers this is just an example
 ```
 ![alt text](image.png)
 
-
-`*.csc`: These are files stored in CSC matrix format similar to CSR format. The files are stored in the format below. See example of CSR to understand how this format is stored.
-```
-rows cols num-non-zeros
-col_ptr: indicate where each col starts and ends in values. Size = col + 1
-row_idx: stores row indices of non-zero elements. Size = num-non-zeros 
-values: stores non-zero elemenet values. Size = num-non-zeros 
-```
-
+### COO files
 `*.coo`: These are files stored in COO matrix format. The files are stored in the format below
 ```
 rows cols num-non-zeros
@@ -67,4 +81,13 @@ EXAMPLE: In the above example
 0 2 c
 1 2 d
 ...
+```
+
+### CSC files: NOT USING
+`*.csc`: These are files stored in CSC matrix format similar to CSR format. The files are stored in the format below. See example of CSR to understand how this format is stored.
+```
+rows cols num-non-zeros
+col_ptr: indicate where each col starts and ends in values. Size = col + 1
+row_idx: stores row indices of non-zero elements. Size = num-non-zeros 
+values: stores non-zero elemenet values. Size = num-non-zeros 
 ```
