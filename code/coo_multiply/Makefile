@@ -1,17 +1,41 @@
-APP_NAME=coo_multiply
+EXECUTABLE := coo_multiply
 
-OBJS=coo_multiply.o
+CU_FILES   := coo_multiply.cu
 
-CXX = g++
-CXXFLAGS = -Wall -O3 -std=c++17 -m64 -I. -fopenmp -Wno-unknown-pragmas 
+CU_DEPS    :=
 
-all: $(APP_NAME)
+###########################################################
 
-$(APP_NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
+ARCH=$(shell uname | sed -e 's/-.*//g')
 
-%.o: %.cpp %.h
-	$(CXX) $(CXXFLAGS) -c $<
+OBJDIR=objs
+CXX=g++ -m64
+CXXFLAGS=-O3 -Wall
+LDFLAGS=-L/usr/local/cuda-11.7/lib64/ -lcudart
+NVCC=nvcc
+NVCCFLAGS=-O3 -m64 --gpu-architecture compute_61 -ccbin /usr/bin/gcc
+
+OBJS=$(OBJDIR)/coo_multiply.o
+
+
+.PHONY: dirs clean
+
+all: $(EXECUTABLE)
+
+default: $(EXECUTABLE)
+
+dirs:
+		mkdir -p $(OBJDIR)/
 
 clean:
-	/bin/rm -rf *~ *.o $(APP_NAME) *.class
+		rm -rf $(OBJDIR) *.ppm *~ $(EXECUTABLE) *.o
+
+$(EXECUTABLE): dirs $(OBJS)
+		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS)
+
+$(OBJDIR)/%.o: %.cpp
+		$(CXX) $< $(CXXFLAGS) -c -o $@
+
+$(OBJDIR)/%.o: %.cu
+		$(NVCC) $< $(NVCCFLAGS) -c -o $@
+
