@@ -1,8 +1,8 @@
 #pragma once
 
+#include "cuda.h"
 #include "cuda_runtime.h"
 #include <cstdio>
-#include <iostream>
 
 #define DEBUG
 

@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "cuda_utils.hpp"
+
 namespace cuspmm {
 
 
@@ -17,13 +19,6 @@ public:
     }
 };
 
-
-template <typename T>
-class DenseMatrix : public Matrix{
-public:
-    T* data;
-};
-
 template<typename T>
 class SparseMatrix : public Matrix{
 public:
@@ -34,6 +29,4 @@ public:
         this->data = nullptr;
     }
 };
-
-
 }

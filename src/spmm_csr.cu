@@ -1,62 +1,107 @@
 #include "cuda_utils.hpp"
-#include "torch/torch.h"
 #include "format.hpp"
-#include "loader.hpp"
-#include "cuda.h"
-#include "cuda_runtime.h"
-
+#include "torch/torch.h"
+#include "spmm_csr.hpp"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
 
 namespace cuspmm {
 
+template <typename T, typename MT, typename AccT>
+__global__ void spmmCSRK1(MT aNumRows, MT aNumCols, MT aNumNonZero,
+                                    MT *rowPtrs, MT *colIdxs, T* aData, 
+                                    MT bNumRows, MT bNumCols, T* bData,
+                                    T* cData) {
+    // A -> sparse matrix -> R x C
+    // B -> dense matrix -> C x N
+    // C -> dense matrix -> C = A @ B -> R x N
+    unsigned int c = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int r = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (c < bNumCols and r < aNumRows) {
+        AccT acc = .0f;
+        unsigned int row_start = rowPtrs[r];
+        unsigned int row_end = rowPtrs[r + 1];
+
+        for (unsigned int i = row_start; i < row_end; i++) {
+            unsigned int c_idx = colIdxs[i];
+            T aValue = aData[i];
+            acc += aValue * bData[c_idx * bNumCols + c];
+        }
+        cData[r * bNumCols + c] = acc;
+    }
+}
+
+template <typename T, typename AccT>
+DenseMatrix<T>* spmmCsrDevice(SparseMatrixCSR<T>* a, DenseMatrix<T>* b) {
+    size_t rows = a->numCols, cols = b->numCols;
+
+    const size_t BLOCKSIZE = 32;
+
+    dim3 block(BLOCKSIZE, BLOCKSIZE);
+    dim3 grid((cols + BLOCKSIZE - 1) / BLOCKSIZE, (rows + BLOCKSIZE - 1) / BLOCKSIZE);
+
+    if (!a->onDevice || !b->onDevice) {
+        std::cerr << "Device incorrect!" << std::endl; 
+        return nullptr;
+    }
+
+    DenseMatrix<T>* c = new DenseMatrix<T>(a->numRows, b->numCols, true);
+
+    spmmCSRK1<T, typename SparseMatrixCSR<T>::metadataType, AccT><<<grid, block>>>(
+        a->numRows, a->numCols, a->numNonZero, a->rowPtrs, a->colIdxs, a->data,
+        b->numRows, b->numCols, b->data, 
+        c->data
+    );
+
+    return c;
+}
 
 template <typename T>
-void runEngineCSR(SparseMatrixCSR<T>* hm, float abs_tol, double rel_tol) {
-
-    SparseMatrixCSR<T>* dm; 
-    cudaCheckError(cudaMalloc(&dm, sizeof(SparseMatrixCSR<T>)));
+void runEngineCSR(SparseMatrixCSR<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
 
     // 1. Move to device
-    move2DeviceCSR(hm, dm);
+    SparseMatrixCSR<T>* da = a->copy2Device();
+    DenseMatrix<T>* db = b->copy2Device();
 
-    std::cout<<"Starting kernel"<<std::endl;
-    spmm_csr_dsd<T>(A_d, B_d, C_d, N);
-    std::cout<<"Kernel done"<<std::endl;
+    // 2. Launch kernel
+    auto cRes = spmmCsrDevice<T, double>(da, db);
+    auto cResCpu = cRes->copy2Host();
+    cResCpu->save2File("32x32.res");
 
-    CHECK_CUDA_ERROR(cudaMemcpy(C_h, C_d, R * N * sizeof(T), cudaMemcpyDeviceToHost));
+    // 3. Check result
+    auto cResSeq = spmmCsrCpu<T, double>(a, b);
+    cResSeq->save2File("32x32_seq.res");
 
+    auto denseA = a->toDense();
     auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
-    torch::Tensor A_t = torch::from_blob(sparse_matrix.mat, {R, C}, options).clone().cuda();
-    torch::Tensor B_t = torch::from_blob(B_h, {C, N}, options).clone().cuda();
-    torch::Tensor C_cuda = torch::from_blob(C_h, {R, N}, options).clone();
+    torch::Tensor taDevice = torch::from_blob(denseA->data, {denseA->numRows, denseA->numCols}, options).clone().cuda();
+    torch::Tensor tbDevice = torch::from_blob(b->data, {b->numRows, b->numCols}, options).clone().cuda();
+    torch::Tensor tcCpu = torch::from_blob(cResCpu->data, {cResCpu->numRows, cResCpu->numCols}, options).clone();
+    torch::Tensor cResTorch = torch::matmul(taDevice, tbDevice).cpu();
+    std::cout << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
 
-    torch::Tensor C_t = compute_torch_mm<torch::Tensor>(A_t, B_t).cpu();
-
-    std::cout << "CUDA vs Torch allclose: "
-              << (torch::allclose(C_cuda, C_t, abs_tol, rel_tol) ? "true" : "false")
-              << std::endl;
-
-    CHECK_CUDA_ERROR(cudaFree(A_d.rowPtrs));
-    CHECK_CUDA_ERROR(cudaFree(A_d.colIdx));
-    CHECK_CUDA_ERROR(cudaFree(A_d.value));
-    CHECK_CUDA_ERROR(cudaFree(B_d));
-    CHECK_CUDA_ERROR(cudaFree(C_d));
-    free(A_h.rowPtrs);
-    free(A_h.colIdx);
-    free(A_h.value);
-    CHECK_CUDA_ERROR(cudaFreeHost(B_h));
-    CHECK_CUDA_ERROR(cudaFreeHost(C_h));
+    auto denseTorch = new DenseMatrix<T>(cResCpu->numRows, cResCpu->numCols, false);
+    std::memcpy(denseTorch->data, cResTorch.data_ptr<float>(), denseTorch->numRows * denseTorch->numCols * sizeof(float));
+    denseTorch->save2File("32x32_torch.res");
 }
 
 } // namespace cuspmm
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     std::string filePath = argv[1];
-    SparseMatrix<float>* matrix = loadCSR<float>(filePath);
+    std::string filePathDense = argv[2];
+
+    cuspmm::SparseMatrixCSR<float> *a = new cuspmm::SparseMatrixCSR<float>(filePath);
+    cuspmm::DenseMatrix<float> *b = new cuspmm::DenseMatrix<float>(filePathDense);
 
     float abs_tol = 1.0e-3f;
     double rel_tol = 1.0e-2f;
 
-    runEngine<float>(matrix, abs_tol, rel_tol);
+    cuspmm::runEngineCSR<float>(a, b, abs_tol, rel_tol);
 
     return 0;
 }
