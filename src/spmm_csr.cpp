@@ -1,7 +1,4 @@
-#include "format.hpp"
-#include "formats/dense.hpp"
-#include "formats/matrix.hpp"
-#include "formats/sparse_csr.hpp"
+#include "spmm_csr.hpp"
 
 namespace cuspmm {
 

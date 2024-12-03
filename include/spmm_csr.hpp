@@ -1,5 +1,7 @@
 #pragma once
 
+#include "formats/sparse_csr.hpp"
+
 namespace cuspmm {
 
 template <typename T, typename AccT>

@@ -1,32 +1,34 @@
 #pragma once
 
-#include "cuda_runtime.h"
-#include "cuda_utils.hpp"
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
 #include <cassert>
+#include <chrono>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <istream>
-#include <sstream>
-#include <stdexcept>
 #include <string>
+#include <unistd.h>
 
 namespace cuspmm {
 
-template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
+template <typename T> class SparseMatrixCOO : public SparseMatrix<T> {
   public:
-    Matrix::metadataType *rowPtrs;
+    Matrix::metadataType *rowIdxs;
     Matrix::metadataType *colIdxs;
 
-    SparseMatrixCSR() : SparseMatrix<T>() {
-        this->rowPtrs = nullptr;
+    SparseMatrixCOO() : SparseMatrix<T>() {
+        this->rowIdxs = nullptr;
         this->colIdxs = nullptr;
     }
 
-    SparseMatrixCSR(std::string filePath) : rowPtrs(nullptr), colIdxs(nullptr) {
+    SparseMatrixCOO(std::string filePath) {
+        this->rowIdxs = nullptr;
+        this->colIdxs = nullptr;
         this->onDevice = false;
 
         std::ifstream inputFile(filePath);
@@ -38,37 +40,22 @@ template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
         }
 
         inputFile >> this->numRows >> this->numCols >> this->numNonZero;
-        std::getline(inputFile, line); // Discard the line
+        constexpr auto max_size = std::numeric_limits<std::streamsize>::max();
+        inputFile.ignore(max_size, '\n');
 
         this->allocateSpace(false);
 
         // Read row ptrs
-        std::getline(inputFile, line);
-        std::istringstream iss(line);
-        for (int i = 0; i <= this->numRows; i++) {
-            iss >> this->rowPtrs[i];
+        for (size_t i = 0; i < this->numNonZero; i++) {
+            inputFile >> this->rowIdxs[i] >> this->colIdxs[i] >> this->data[i];
         }
 
-        // Read column index
-        std::getline(inputFile, line);
-        iss.str(line);
-        iss.clear();
-        for (int i = 0; i <= this->numNonZero; i++) {
-            iss >> this->colIdxs[i];
-        }
-
-        // Read data
-        std::getline(inputFile, line);
-        iss.str(line);
-        iss.clear();
-        for (int i = 0; i < this->numNonZero; i++) {
-            iss >> this->data[i];
-        }
+        inputFile.close();
     }
 
-    SparseMatrixCSR(Matrix::metadataType numRows, Matrix::metadataType numCols,
+    SparseMatrixCOO(Matrix::metadataType numRows, Matrix::metadataType numCols,
                     Matrix::metadataType numNonZero, bool onDevice)
-        : rowPtrs(nullptr), colIdxs(nullptr) {
+        : rowIdxs(nullptr), colIdxs(nullptr) {
         this->numRows = numRows;
         this->numCols = numCols;
         this->numNonZero = numNonZero;
@@ -76,12 +63,12 @@ template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
         this->allocateSpace(onDevice);
     }
 
-    ~SparseMatrixCSR() {
-        if (this->rowPtrs != nullptr) {
+    ~SparseMatrixCOO() {
+        if (this->rowIdxs != nullptr) {
             if (this->onDevice) {
-                cudaCheckError(cudaFree(this->rowPtrs));
+                cudaCheckError(cudaFree(this->rowIdxs));
             } else {
-                cudaCheckError(cudaFreeHost(this->rowPtrs));
+                cudaCheckError(cudaFreeHost(this->rowIdxs));
             }
         }
 
@@ -102,16 +89,16 @@ template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
         }
     }
 
-    SparseMatrixCSR<T> *copy2Device() {
+    SparseMatrixCOO<T> *copy2Device() {
         assert(this->onDevice == false);
         assert(this->data != nullptr);
 
-        SparseMatrixCSR<T> *newMatrix = new SparseMatrixCSR<T>(
+        SparseMatrixCOO<T> *newMatrix = new SparseMatrixCOO<T>(
             this->numRows, this->numCols, this->numNonZero, true);
 
         cudaCheckError(
-            cudaMemcpy(newMatrix->rowPtrs, this->rowPtrs,
-                       (this->numRows + 1) * sizeof(Matrix::metadataType),
+            cudaMemcpy(newMatrix->rowIdxs, this->rowIdxs,
+                       this->numNonZero * sizeof(Matrix::metadataType),
                        cudaMemcpyHostToDevice));
         cudaCheckError(
             cudaMemcpy(newMatrix->colIdxs, this->colIdxs,
@@ -125,35 +112,37 @@ template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
 
     bool allocateSpace(bool onDevice) {
         assert(this->data == nullptr);
+        assert(this->rowIdxs == nullptr);
+        assert(this->colIdxs == nullptr);
         if (onDevice) {
             cudaCheckError(
                 cudaMalloc(&this->data, this->numNonZero * sizeof(T)));
             cudaCheckError(
-                cudaMalloc(&this->rowPtrs,
-                           (this->numRows + 1) * sizeof(Matrix::metadataType)));
+                cudaMalloc(&this->rowIdxs,
+                           this->numNonZero * sizeof(Matrix::metadataType)));
             cudaCheckError(
                 cudaMalloc(&this->colIdxs,
                            this->numNonZero * sizeof(Matrix::metadataType)));
             cudaCheckError(
                 cudaMemset(this->data, 0, this->numNonZero * sizeof(T)));
             cudaCheckError(
-                cudaMemset(this->rowPtrs, 0,
-                           (this->numRows + 1) * sizeof(Matrix::metadataType)));
+                cudaMemset(this->rowIdxs, 0,
+                           this->numNonZero * sizeof(Matrix::metadataType)));
             cudaCheckError(
                 cudaMemset(this->colIdxs, 0,
                            this->numNonZero * sizeof(Matrix::metadataType)));
         } else {
             cudaCheckError(
                 cudaMallocHost(&this->data, this->numNonZero * sizeof(T)));
-            cudaCheckError(cudaMallocHost(&this->rowPtrs,
-                                          (this->numRows + 1) *
+            cudaCheckError(cudaMallocHost(&this->rowIdxs,
+                                          this->numNonZero *
                                               sizeof(Matrix::metadataType)));
             cudaCheckError(cudaMallocHost(&this->colIdxs,
                                           this->numNonZero *
                                               sizeof(Matrix::metadataType)));
             std::memset(this->data, 0, this->numNonZero * sizeof(T));
-            std::memset(this->rowPtrs, 0,
-                        (this->numRows + 1) * sizeof(Matrix::metadataType));
+            std::memset(this->rowIdxs, 0,
+                        this->numNonZero * sizeof(Matrix::metadataType));
             std::memset(this->colIdxs, 0,
                         this->numNonZero * sizeof(Matrix::metadataType));
         }
@@ -169,34 +158,22 @@ template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
         DenseMatrix<T> *dm =
             new DenseMatrix<T>(this->numRows, this->numCols, false);
 
-        for (mt r = 0; r < this->numRows; r++) {
-            mt row_start = this->rowPtrs[r];
-            mt row_end = this->rowPtrs[r + 1];
-            for (mt idx = row_start; idx < row_end; idx++) {
-                mt c = this->colIdxs[idx];
-                dm->data[r * dm->numCols + c] = this->data[idx];
-            }
+        for (size_t i = 0; i < this->numNonZero; i++) {
+            mt r = this->rowIdxs[i];
+            mt c = this->colIdxs[i];
+            dm->data[r * dm->numCols + c] = this->data[i];
         }
+
         return dm;
     }
 
-    friend std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<T> &m) {
+    friend std::ostream &operator<<(std::ostream &out, SparseMatrixCOO<T> &m) {
         out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero
             << std::endl;
-        for (size_t i = 0; i < m.numRows; i++) {
-            out << m.rowPtrs[i] << ' ';
+        for (size_t i = 0; i < m->numNonZero; i++) {
+            std::cout << m.rowIdxs[i] << ' ' << m.colIdxs[i] << ' ' << m.data[i]
+                      << std::endl;
         }
-        out << std::endl;
-
-        for (size_t i = 0; i < m.numNonZero; i++) {
-            out << m.colIdxs[i] << ' ';
-        }
-        out << std::endl;
-
-        for (size_t i = 0; i < m.numNonZero; i++) {
-            out << m.data[i] << ' ';
-        }
-        out << std::endl;
 
         return out;
     }
