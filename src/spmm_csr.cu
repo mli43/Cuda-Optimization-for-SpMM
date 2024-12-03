@@ -89,19 +89,6 @@ void runEngineCSR(SparseMatrixCSR<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     denseTorch->save2File("32x32_torch.res");
 }
 
+template void runEngineCSR<float>(SparseMatrixCSR<float> *a, DenseMatrix<float>* b, float abs_tol, double rel_tol);
+
 } // namespace cuspmm
-
-int main(int argc, char *argv[]) {
-    std::string filePath = argv[1];
-    std::string filePathDense = argv[2];
-
-    cuspmm::SparseMatrixCSR<float> *a = new cuspmm::SparseMatrixCSR<float>(filePath);
-    cuspmm::DenseMatrix<float> *b = new cuspmm::DenseMatrix<float>(filePathDense);
-
-    float abs_tol = 1.0e-3f;
-    double rel_tol = 1.0e-2f;
-
-    cuspmm::runEngineCSR<float>(a, b, abs_tol, rel_tol);
-
-    return 0;
-}
