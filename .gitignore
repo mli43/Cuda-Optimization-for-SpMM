@@ -1,0 +1,11 @@
+# build files
+build
+
+# cache files
+.cache
+
+# compile commands for clangd
+compile_commands.json
+
+id_ed25519
+.ipynb_checkpoints/

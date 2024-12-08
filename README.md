@@ -3,6 +3,7 @@ This is the project repo for CMU 15618 final project
 
 ## Reports
 [Proposal](reports/proposal.pdf)
+[Milestone](reports/milestone.pdf)
 
 
 ## Abstract
@@ -20,4 +21,3 @@ communication overhead and increase computation speed for large SPMM in
 real-world applications. We will also compare the performance of our
 optimization with the NVIDIA cuSparse library and the dense counterpart
 cuBLAS to understand and evaluate the effectiveness of our implementation.
-
