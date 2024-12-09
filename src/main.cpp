@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
                 csr_file = entry.path().string();
                 csr_found = true;
                 std::cout << ".csr file is found: " << csr_file << "\n";
-            } else if (TEST_CSR && endsWith(file_name, "dense.in")) {
+            } else if (endsWith(file_name, "dense.in")) {
                 dense_file = entry.path().string();
                 dense_found = true;
                 std::cout << "dense file is found: " << dense_file << "\n";
