@@ -180,3 +180,4 @@ template <typename T> class SparseMatrixCOO : public SparseMatrix<T> {
 };
 
 } // namespace cuspmm
+

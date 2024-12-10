@@ -31,15 +31,18 @@ template <typename T> class DenseMatrix : public Matrix {
         inputFile >> this->numRows >> this->numCols;
         std::getline(inputFile, line); // Discard the header line
 
-        std::getline(inputFile, line);
-        std::istringstream iss(line);
 
         // Read column index
         uint32_t total = this->numRows * this->numCols;
         cudaCheckError(
             cudaMallocHost(&this->data, sizeof(Matrix::metadataType) * total));
-        for (int i = 0; i < total; i++) {
-            iss >> this->data[i];
+
+        for (int i = 0; i < this->numRows; i++) {
+            std::getline(inputFile, line);
+            std::istringstream iss(line);
+            for (int j = 0; j < this->numCols; j++) {
+                iss>> this->data[i * this->numCols + j];
+            }
         }
 
         this->onDevice = false;
