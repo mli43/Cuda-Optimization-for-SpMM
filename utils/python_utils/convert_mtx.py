@@ -46,8 +46,9 @@ def process_mtx(directory):
                 try:
                     print(f"Processing {mtx_file_path}...")
                     matrix = mmread(mtx_file_path).tocsr()
-                    matrix_csc = mmread(mtx_file_path).tocsc()
+                    # matrix_csc = mmread(mtx_file_path).tocsc()
                     matrix_coo = mmread(mtx_file_path).tocoo()
+                    matrix_ell = mmread(mtx_file_path).tocsr()
                 except Exception as e:
                     print(f"Error reading or converting {mtx_file_path}: {e}")
                     continue
@@ -55,8 +56,10 @@ def process_mtx(directory):
                 # Prepare the output file path
                 base_name = os.path.splitext(file)[0]
                 csr_file_path = os.path.join(root, f"{base_name}.csr")
-                csc_file_path = os.path.join(root, f"{base_name}.csc")
+                # csc_file_path = os.path.join(root, f"{base_name}.csc")
                 coo_file_path = os.path.join(root, f"{base_name}.coo")
+                ell_file_path_colind = os.path.join(root, f"{base_name}_colind.ell")
+                ell_file_path_values = os.path.join(root, f"{base_name}_values.ell")
                 
                 # Save the CSR matrix in the specified format
                 try:
@@ -78,8 +81,9 @@ def process_mtx(directory):
                         values = matrix.data
                         out_file.write(" ".join(map(str, values)) + "\n")
                     
-                    print(f"Saved CSR format to {csr_file_path}")
+                        print(f"Saved CSR format to {csr_file_path}")
                     
+                    '''
                     with open(csc_file_path, "w") as out_file:
                         # Line 1: Number of rows, columns, and non-zero elements
                         rows, cols = matrix_csc.shape
@@ -98,7 +102,8 @@ def process_mtx(directory):
                         values = matrix_csc.data
                         out_file.write(" ".join(map(str, values)) + "\n")
                     
-                    print(f"Saved CSC format to {csc_file_path}")
+                        print(f"Saved CSC format to {csc_file_path}")
+                    '''
                     
                     with open(coo_file_path, "w") as out_file:
                         # Line 1: Number of rows, columns, and non-zero elements
@@ -117,8 +122,42 @@ def process_mtx(directory):
                         for r, c, v in zip(rows, cols, values):
                             out_file.write(f"{r} {c} {v}\n")
     
-                    print(f"Saved COO format to {coo_file_path}")
-                    
+                        print(f"Saved COO format to {coo_file_path}")
+
+                    ### Now write ELLpack format
+                    rows, cols = matrix_ell.shape
+                    nnz = matrix_ell.nnz
+
+                    # now write the max num of non-zero in a row
+                    max_nnz = matrix_ell.getnnz(axis=1).max()
+
+                    colind = [[-1 for _ in range(max_nnz)] for _ in range(rows)]
+                    values = [[0 for _ in range(max_nnz)] for _ in range(rows)]
+
+                    for row in range(rows):
+                        row_start = matrix_ell.indptr[row]
+                        row_end = matrix_ell.indptr[row+1]
+
+                        row_indices = matrix_ell.indices[row_start:row_end]
+                        row_values = matrix_ell.data[row_start:row_end]
+
+                        for i,col in enumerate(row_indices):
+                            colind[row][i] = col
+                            values[row][i] = row_values[i]
+
+                    with open(ell_file_path_colind, "w") as colind_file:
+                        colind_file.write(f"{rows} {cols} {nnz} {max_nnz}\n")
+
+                        for row in colind:
+                            colind_file.write(" ".join(map(str, row)) + "\n")
+
+                        print(f"Saved ELL colindex to {ell_file_path_colind}")
+
+                    with open(ell_file_path_values, "w") as value_file:
+                        for row in colind:
+                            value_file.write(" ".join(map(str, row)) + "\n")
+                        print(f"Saved ELL values to {ell_file_path_values}")
+
                         
                 except Exception as e:
                     print(f"Error writing to {csr_file_path}: {e}")
