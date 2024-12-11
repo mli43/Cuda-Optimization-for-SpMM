@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <chrono>
 
 namespace cuspmm {
 
@@ -62,19 +63,36 @@ DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
 
 template <typename T>
 void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
+    auto start = std::chrono::high_resolution_clock::now();
 
     // 1. Move to device
     SparseMatrixELL<T>* da = a->copy2Device();
     DenseMatrix<T>* db = b->copy2Device();
+    auto copy_to_device_end = std::chrono::high_resolution_clock::now();
 
     // 2. Launch kernel
     auto cRes = spmmEllDevice<T, double>(da, db);
-    auto cResCpu = cRes->copy2Host();
+    auto kernel_end = std::chrono::high_resolution_clock::now();
 
-    cResCpu->save2File("ell_cuda.res");
+    auto cResCpu = cRes->copy2Host();
+    auto copy_to_host_end = std::chrono::high_resolution_clock::now();
 
     // 3. Check result
     auto cResSeq = spmmEllCpu<T, double>(a, b);
+    auto seq_end = std::chrono::high_resolution_clock::now();
+
+    // 4. Report time 
+    auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_device_end - start);
+    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - copy_to_device_end);
+    auto copy2HostTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - kernel_end);
+    auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
+
+    std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
+              << "kernelTime (us):" << kernelTime.count() << ','
+              << "copy2HostTime (us):" << copy2HostTime.count() << ','
+              << "seqTime (us):" << seqTime.count() << '\n';
+
+    cResCpu->save2File("ell_cuda.res");
     cResSeq->save2File("ell_cpu.res");
 
     auto denseA = a->toDense();

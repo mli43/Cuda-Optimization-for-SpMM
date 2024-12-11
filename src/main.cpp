@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
         new cuspmm::DenseMatrix<float>(dense_file);
 
     if (TEST_COO) {
-
+        std::cout << "###COO,testCase:" << input_dirname << ',';
         cuspmm::SparseMatrixCOO<float> *a =
             new cuspmm::SparseMatrixCOO<float>(coo_file);
 
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_CSR) {
-
+        std::cout << "###CSR,testCase:" << input_dirname << ',';
         cuspmm::SparseMatrixCSR<float> *a =
             new cuspmm::SparseMatrixCSR<float>(csr_file);
 
@@ -141,6 +141,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_ELL) {
+        std::cout << "###ELL,testCase:" << input_dirname << ',';
         cuspmm::SparseMatrixELL<float> *a =
             new cuspmm::SparseMatrixELL<float>(ell_colind_file, ell_values_file);
 
