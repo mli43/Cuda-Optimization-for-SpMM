@@ -7,5 +7,15 @@ build
 # compile commands for clangd
 compile_commands.json
 
+# data
+*.coo
+*.csr
+*.csc
+*.ell
+*.bsr
+*.in
+*.out
+*.except
+
 id_ed25519
 .ipynb_checkpoints/

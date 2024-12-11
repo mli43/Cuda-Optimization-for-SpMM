@@ -5,6 +5,7 @@
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
 #include "commons.hpp"
+#include <ATen/core/IListRef.h>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -19,7 +20,8 @@ namespace cuspmm {
 
 template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
   public:
-    Matrix::metadataType blockSize;
+    Matrix::metadataType blockRowSize;
+    Matrix::metadataType blockColSize;
     Matrix::metadataType numBlocks;
     Matrix::metadataType *blockRowPtrs;
     Matrix::metadataType *blockColIdxs;
@@ -28,7 +30,8 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
     Matrix::metadataType numElements;
 
     SparseMatrixBSR() : SparseMatrix<T>() {
-        this->blockSize = 0;
+        this->blockRowSize = 0;
+        this->blockColSize = 0;
         this->numBlocks = 0;
         this->numBlockRows = 0;
         this->numBlockRows = 0;
@@ -50,10 +53,10 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
             throw std::runtime_error(NULL);
         }
 
-        inputFile >> this->numRows >> this->numCols >> this->numNonZero >> this->blockSize >> this->numBlocks;
+        inputFile >> this->numRows >> this->numCols >> this->numNonZero >> this->blockRowSize >> this->blockColSize >> this->numBlocks;
         // Calculate metrics
-        this->numBlockRows = this->numRows / this->blockSize;
-        this->numElements = this->numBlocks * this->blockSize * this->blockSize;
+        this->numBlockRows = this->numRows / this->blockRowSize;
+        this->numElements = this->numBlocks * this->blockRowSize * this->blockColSize;
 
         std::getline(inputFile, line); // Discard the line
 
@@ -75,25 +78,23 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
         }
 
         // Read data
-        std::getline(inputFile, line);
-        iss.str(line);
-        iss.clear();
         for (int i = 0; i < this->numElements; i++) {
-            iss >> this->data[i];
+            inputFile >> this->data[i];
         }
     }
 
     SparseMatrixBSR(Matrix::metadataType numRows, Matrix::metadataType numCols,
-                    Matrix::metadataType numNonZero, Matrix::metadataType blockSize, 
+                    Matrix::metadataType numNonZero, Matrix::metadataType blockRowSize, Matrix::metadataType blockColSize,
                     Matrix::metadataType numBlocks, bool onDevice) {
-        this->blockSize = blockSize;
+        this->blockRowSize = blockRowSize;
+        this->blockColSize = blockColSize;
         this->numBlocks = numBlocks;
         this->blockRowPtrs = nullptr;
         this->blockColIdxs = nullptr;
 
         // Calculate depended numbers
         this->numBlockRows = numBlockRows;
-        this->numElements = numBlocks * blockSize * blockSize;
+        this->numElements = numBlocks * blockRowSize * blockColSize;
         
         this->numRows = numRows;
         this->numCols = numCols;
@@ -101,18 +102,19 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
         this->onDevice = onDevice;
 
         this->allocateSpace(onDevice);
-        this->check();
+        this->assertCheck();
     }
 
     SparseMatrixBSR(SparseMatrixBSR<T>* target, bool onDevice) {
-        this->blockSize = target->blockSize;
+        this->blockRowSize = target->blockRowSize;
+        this->blockColSize = target->blockColSize;
         this->numBlocks = target->numBlocks;
         this->blockRowPtrs = nullptr;
         this->blockColIdxs = nullptr;
 
         // Calculate depended numbers
-        this->numBlockRows = this->numBlockRows;
-        this->numElements = this->numBlocks * this->blockSize * this->blockSize;
+        this->numBlockRows = target->numBlockRows;
+        this->numElements = target->numElements;
 
         this->numRows = target->numRows;
         this->numCols = target->numCols;
@@ -121,7 +123,7 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
 
         this->allocateSpace(this->onDevice);
         this->copyData(target, this->onDevice);
-        this->check();
+        this->assertCheck();
     }
 
     ~SparseMatrixBSR() {
@@ -187,14 +189,15 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
         return newMatrix;
     }
 
-    bool check() {
-        assert(this->numRows % this->blockSize == 0);
-        assert(this->numCols % this->blockSize == 0);
+    void assertCheck() {
+        assert(this->numRows % this->blockRowSize == 0);
+        assert(this->numCols % this->blockColSize == 0);
     }
 
-    bool assertSameShape(SparseMatrixBSR<T> target) {
+    void assertSameShape(SparseMatrixBSR<T>* target) {
         assert(
-        this->blockSize == target->blockSize &&
+        this->blockRowSize == target->blockRowSize &&
+        this->blockColSize == target->blockColSize &&
         this->numBlocks == target->numBlocks &&
         this->numBlockRows == target->numBlockRows &&
         this->numRows == target->numRows &&
@@ -245,10 +248,37 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
         return true;
     }
 
-    SparseMatrixBSR<T>* fromDense(DenseMatrix<T>* dense) {
-        throw std::runtime_error("Not implemented");
+    SparseMatrixBSR<T>* fromDense(DenseMatrix<T>* dense, Matrix::metadataType blockRowSize, Matrix::metadataType blockColSize) {
+        throw std::runtime_error("Not Implemented");
+        const T zero = 0;
+        assert(dense->numRows % blockRowSize == 0 && dense->numCols % blockColSize == 0);
 
+        using mt = Matrix::metadataType;
+        mt numBlockRows = dense->numRows / blockRowSize;
+        mt numBlockCols = dense->numCols / blockColSize;
 
+        for (mt blockRowIdx = 0; blockRowIdx < numBlockRows; blockRowIdx++) {
+            for (mt blockColIdx = 0; blockColIdx < numBlockCols; blockColIdx++) {
+                // 1. Check if the block have non-zero elements
+                mt blockRowBase = blockRowSize * blockRowIdx;
+                mt blockColBase = blockColSize * blockColIdx;
+                bool haveNonZero = false;
+                for (int i = 0; i < blockRowSize; i++) {
+                    for (int j = 0; j < blockColSize; j++) {
+                        if (dense->data[RowMjIdx(blockRowBase + i, blockColBase + j, dense->numCols)] != zero) {
+                            haveNonZero = true;
+                            break;
+                        }
+                    }
+                    if (haveNonZero) break;
+                }
+
+                if (!haveNonZero) continue;
+
+                // TODO: Process the block
+                ;
+            }
+        }
     }
 
     DenseMatrix<T> *toDense() {
@@ -264,13 +294,13 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
             mt blockRowEnd = this->blockRowPtrs[blockRow + 1];
             for (mt blockIdx = blockRowStart; blockIdx < blockRowEnd; blockIdx++) {
                 mt blockCol = this->blockColIdxs[blockIdx];
-                T* blockData = this->data + (this->blockSize * this->blockSize * blockIdx);
+                T* blockData = this->data + (this->blockRowSize * this->blockColSize * blockIdx);
 
-                mt denseRowStart = blockRow * this->blockSize;
-                mt denseColStart = blockCol * this->blockSize;
-                for (mt r = 0; r < this->blockSize; r++) {
-                    for (mt c = 0; c < this->blockSize; c++) {
-                        dm->data[RrowMjIdx((denseRowStart + r), (denseColStart + c), (dm->numCols))] = blockData[RrowMjIdx(r, c, this->blockSize)];
+                mt denseRowStart = blockRow * this->blockRowSize;
+                mt denseColStart = blockCol * this->blockColSize;
+                for (mt r = 0; r < this->blockRowSize; r++) {
+                    for (mt c = 0; c < this->blockColSize; c++) {
+                        dm->data[RowMjIdx((denseRowStart + r), (denseColStart + c), (dm->numCols))] = blockData[RowMjIdx(r, c, this->blockRowSize)];
                     }
                 }
             }
@@ -281,7 +311,7 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
 
     friend std::ostream &operator<<(std::ostream &out, SparseMatrixBSR<T> &m) {
         throw std::runtime_error("Not implemented");
-        out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero << ' ' << m.blockSize << ' ' << m.numBlocks
+        out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero << ' ' << m.blockRowSize << ' ' << m.numBlocks
             << std::endl;
         for (size_t i = 0; i < m.numRows; i++) {
             out << m.blockRowPtrs[i] << ' ';
