@@ -62,23 +62,23 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
         // Read row ptrs
         std::getline(inputFile, line);
         std::istringstream iss(line);
-        for (int i = 0; i <= this->numRows; i++) {
-            iss >> this->rowPtrs[i];
+        for (int i = 0; i <= this->numBlockRows; i++) {
+            iss >> this->blockRowPtrs[i];
         }
 
         // Read column index
         std::getline(inputFile, line);
         iss.str(line);
         iss.clear();
-        for (int i = 0; i <= this->numNonZero; i++) {
-            iss >> this->colIdxs[i];
+        for (int i = 0; i <= this->numBlocks; i++) {
+            iss >> this->blockColIdxs[i];
         }
 
         // Read data
         std::getline(inputFile, line);
         iss.str(line);
         iss.clear();
-        for (int i = 0; i < this->numNonZero; i++) {
+        for (int i = 0; i < this->numElements; i++) {
             iss >> this->data[i];
         }
     }
@@ -270,7 +270,7 @@ template <typename T> class SparseMatrixBSR : public SparseMatrix<T> {
                 mt denseColStart = blockCol * this->blockSize;
                 for (mt r = 0; r < this->blockSize; r++) {
                     for (mt c = 0; c < this->blockSize; c++) {
-                        dm->data[INDEX((denseRowStart + r), (denseColStart + c), (dm->numCols))] = blockData[INDEX(r, c, this->blockSize)];
+                        dm->data[RrowMjIdx((denseRowStart + r), (denseColStart + c), (dm->numCols))] = blockData[RrowMjIdx(r, c, this->blockSize)];
                     }
                 }
             }
