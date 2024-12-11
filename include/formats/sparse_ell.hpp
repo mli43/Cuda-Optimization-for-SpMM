@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 namespace cuspmm{
+
 template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
   public:
     Matrix::metadataType *colIdxs;
@@ -71,13 +72,14 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
 
     SparseMatrixELL(Matrix::metadataType numRows, Matrix::metadataType numCols,
                     Matrix::metadataType numNonZero, Matrix::metadataType maxRowNnz, 
-                    bool onDevice)
-        : colIdxs(nullptr) {
+                    bool onDevice) {
         this->numRows = numRows;
         this->numCols = numCols;
         this->numNonZero = numNonZero;
         this->onDevice = onDevice;
         this->maxRowNnz = maxRowNnz;
+        this->colIdxs = nullptr;
+        this->data = nullptr;
         this->allocateSpace(onDevice);
     }
 
@@ -103,6 +105,7 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
         assert(this->data == nullptr);
         assert(this->colIdxs == nullptr);
         if (onDevice) {
+
             cudaCheckError(
                 cudaMalloc(&this->data, this->numRows * this->maxRowNnz* sizeof(T)));
             cudaCheckError(
@@ -131,6 +134,7 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
         assert(this->onDevice == false);
         assert(this->data != nullptr);
 
+
         SparseMatrixELL<T> *newMatrix = new SparseMatrixELL<T>(
             this->numRows, this->numCols, this->numNonZero, this->maxRowNnz, true);
 
@@ -141,9 +145,32 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
         cudaCheckError(cudaMemcpy(newMatrix->data, this->data,
                                   this->numRows * this->maxRowNnz * sizeof(T),
                                   cudaMemcpyHostToDevice));
+
         return newMatrix;
     }
 
+    DenseMatrix<T> *toDense() {
+        assert(!this->onDevice);
 
-}
+        using mt = Matrix::metadataType;
+
+        DenseMatrix<T> *dm =
+            new DenseMatrix<T>(this->numRows, this->numCols, false);
+
+        for (size_t row = 0; row < this->numRows; row++) {
+            size_t base = row * this->maxRowNnz;
+            for (size_t colind = 0; colind < this->maxRowNnz; colind++) {
+                int col = this->colIdxs[base + colind];
+                if (col >= 0) {
+                    dm->data[row * dm->numCols + col] = this->data[base + colind];
+                }
+            }
+        }
+
+        return dm;
+    }
+
+
+};
+
 }

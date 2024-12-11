@@ -15,12 +15,15 @@ DenseMatrix<T>* spmmEllCpu(SparseMatrixELL<T>* ma, DenseMatrix<T>* mb) {
     }
 
     for (mt row = 0; row < ma->numRows; row++) {
-        for (mt colind = 0; colind < ma->maxNumNnz; colind++) {
-            mt col = ma->colIdxs[row * ma->maxNumNnz + colind];
-            T value = ma->data[row * ma->maxNumNnz + colind];
+        for (mt colind = 0; colind < ma->maxRowNnz; colind++) {
+            int col = ma->colIdxs[row * ma->maxRowNnz + colind];
+            T value = ma->data[row * ma->maxRowNnz + colind];
 
+            if (col >= 0) {
+            //printf("row %d, col %d, value %f\n", row, col, value);
             for (mt j = 0; j < mb->numCols; j++){
                 mc->data[row * mc->numCols + j] += value * mb->data[col * mb->numCols + j];
+            }
             }
         }
 
@@ -37,8 +40,8 @@ DenseMatrix<T>* spmmEllCpu(SparseMatrixELL<T>* ma, DenseMatrix<T>* mb) {
     */
 
     return mc;
-}
+};
 
-template DenseMatrix<float>* spmmEllCpu<float, double>(SparseMatrixCOO<float>* ma, DenseMatrix<float>* mb);
+template DenseMatrix<float>* spmmEllCpu<float, double>(SparseMatrixELL<float>* ma, DenseMatrix<float>* mb);
 
 }

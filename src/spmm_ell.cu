@@ -17,16 +17,32 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNn
     // A -> sparse matrix -> R x C
     // B -> dense matrix -> C x N
     // C -> dense matrix -> C = A @ B -> R x N
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    size_t numValues = aNumRows * aMaxRowNnz;
+
+    if (idx < numValues) {
+        int row = idx / aMaxRowNnz;
+        int col = colIdxs[idx];
+        float value = aData[idx];
+        
+
+        if (col >= 0) {
+            for (int j = 0; j < bNumCols; j++) {
+                atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]); 
+            }
+        }
+    }
 }
 
 template <typename T, typename AccT>
 DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
-    const size_t numNonZero = a->numNonZero;
+    const size_t numValues = a->numRows * a->maxRowNnz;
 
     const size_t BLOCKSIZE = 1024;
 
     dim3 block(BLOCKSIZE);
-    dim3 grid((numNonZero + BLOCKSIZE - 1) / BLOCKSIZE);
+    dim3 grid((numValues + BLOCKSIZE - 1) / BLOCKSIZE);
 
     if (!a->onDevice || !b->onDevice) {
         std::cerr << "Device incorrect!" << std::endl; 
@@ -54,25 +70,24 @@ void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     // 2. Launch kernel
     auto cRes = spmmEllDevice<T, double>(da, db);
     auto cResCpu = cRes->copy2Host();
+
     cResCpu->save2File("ell_cuda.res");
 
     // 3. Check result
     auto cResSeq = spmmEllCpu<T, double>(a, b);
     cResSeq->save2File("ell_cpu.res");
 
-    /*
     auto denseA = a->toDense();
     auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
     torch::Tensor taDevice = torch::from_blob(denseA->data, {denseA->numRows, denseA->numCols}, options).clone().cuda();
     torch::Tensor tbDevice = torch::from_blob(b->data, {b->numRows, b->numCols}, options).clone().cuda();
     torch::Tensor tcCpu = torch::from_blob(cResCpu->data, {cResCpu->numRows, cResCpu->numCols}, options).clone();
     torch::Tensor cResTorch = torch::matmul(taDevice, tbDevice).cpu();
-    std::cout << "coo allclose: " << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
+    std::cout << "ell allclose: " << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
 
     auto denseTorch = new DenseMatrix<T>(cResCpu->numRows, cResCpu->numCols, false);
     std::memcpy(denseTorch->data, cResTorch.data_ptr<float>(), denseTorch->numRows * denseTorch->numCols * sizeof(float));
-    denseTorch->save2File("coo_torch.res");
-    */
+    denseTorch->save2File("ell_torch.res");
 }
 
 template void runEngineELL<float>(SparseMatrixELL<float> *a, DenseMatrix<float>* b, float abs_tol, double rel_tol);

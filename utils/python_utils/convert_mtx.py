@@ -151,10 +151,10 @@ def process_mtx(directory):
                         for row in colind:
                             colind_file.write(" ".join(map(str, row)) + "\n")
 
-                        print(f"Saved ELL colindex to {ell_file_path_colind}")
+                        print(f"Saved ELL colind to {ell_file_path_colind}")
 
                     with open(ell_file_path_values, "w") as value_file:
-                        for row in colind:
+                        for row in values:
                             value_file.write(" ".join(map(str, row)) + "\n")
                         print(f"Saved ELL values to {ell_file_path_values}")
 
