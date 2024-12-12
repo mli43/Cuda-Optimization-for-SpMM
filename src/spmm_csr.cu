@@ -83,11 +83,13 @@ void runEngineCSR(SparseMatrixCSR<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_device_end - start);
     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - copy_to_device_end);
     auto copy2HostTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - kernel_end);
+    auto parallelTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - start);
     auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
 
     std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
               << "kernelTime (us):" << kernelTime.count() << ','
               << "copy2HostTime (us):" << copy2HostTime.count() << ','
+              << "parallelTime (us):" << parallelTime.count() << ','
               << "seqTime (us):" << seqTime.count() << '\n';
 
     cResCpu->save2File("csr_cuda.res");

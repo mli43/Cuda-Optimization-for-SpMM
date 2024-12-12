@@ -30,6 +30,27 @@ __global__ void spmmCOOK1(MT aNumRows, MT aNumCols, MT aNumNonZero,
     }
 }
 
+template <typename T, typename MT, typename AccT>
+__global__ void spmmCOOK2(MT aNumRows, MT aNumCols, MT aNumNonZero,
+                                    MT *rowIdxs, MT *colIdxs, T* aData, 
+                                    MT bNumRows, MT bNumCols, T* bData,
+                                    T* cData) {
+    // A -> sparse matrix -> R x C
+    // B -> dense matrix -> C x N
+    // C -> dense matrix -> C = A @ B -> R x N
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < aNumNonZero) {
+        int row = rowIdxs[idx];
+        int col = colIdxs[idx];
+        float value = aData[idx];
+
+        for (int j = 0; j < bNumCols; j++) {
+            atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]);
+        }
+    }
+}
+
 template <typename T, typename AccT>
 DenseMatrix<T>* spmmCooDevice(SparseMatrixCOO<T>* a, DenseMatrix<T>* b) {
     const size_t numNonZero = a->numNonZero;
@@ -79,11 +100,13 @@ void runEngineCOO(SparseMatrixCOO<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_device_end - start);
     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - copy_to_device_end);
     auto copy2HostTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - kernel_end);
+    auto parallelTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - start);
     auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
 
     std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
               << "kernelTime (us):" << kernelTime.count() << ','
               << "copy2HostTime (us):" << copy2HostTime.count() << ','
+              << "parallelTime (us):" << parallelTime.count() << ','
               << "seqTime (us):" << seqTime.count() << '\n';
 
 

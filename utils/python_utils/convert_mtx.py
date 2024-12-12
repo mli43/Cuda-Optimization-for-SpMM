@@ -43,9 +43,10 @@ def save_bsr_matrix(matrix, filename, block_size=(4, 4)):
 
         # Write the values of the blocks
         for block in data:
-            print(block)
+            #print(block)
             file.write(" ".join(map(str, block.flatten())) + "\n")
-    
+
+        print(f"Saved BSR values to {filename}")
 
 def process_mtx(directory):
     # Walk through the directory and its subdirectories
@@ -128,6 +129,9 @@ def process_mtx(directory):
                     
                         print(f"Saved CSR format to {csr_file_path}")
                     
+                except Exception as e:
+                    print(f"Error writing to {csr_file_path}: {e}")
+
                     '''
                     with open(csc_file_path, "w") as out_file:
                         # Line 1: Number of rows, columns, and non-zero elements
@@ -150,6 +154,7 @@ def process_mtx(directory):
                         print(f"Saved CSC format to {csc_file_path}")
                     '''
                     
+                try:
                     with open(coo_file_path, "w") as out_file:
                         # Line 1: Number of rows, columns, and non-zero elements
                         rows, cols = matrix_coo.shape
@@ -168,6 +173,10 @@ def process_mtx(directory):
                             out_file.write(f"{r} {c} {v}\n")
     
                         print(f"Saved COO format to {coo_file_path}")
+                except Exception as e:
+                    print(f"Error writing to {coo_file_path}: {e}")
+
+                try:
 
                     ### Now write ELLpack format
                     rows, cols = matrix_ell.shape
@@ -198,11 +207,19 @@ def process_mtx(directory):
 
                         print(f"Saved ELL colind to {ell_file_path_colind}")
 
+                except Exception as e:
+                    print(f"Error writing to {ell_file-path_colin}: {e}")
+
+                try:
+
                     with open(ell_file_path_values, "w") as value_file:
                         for row in values:
                             value_file.write(" ".join(map(str, row)) + "\n")
                         print(f"Saved ELL values to {ell_file_path_values}")
+                except Exception as e:
+                    print(f"Error writing to {ell_file_path_value}: {e}")
                     
+                try:
                     save_bsr_matrix(matrix_bsr, bsr_file_path)
                         
                 except Exception as e:
