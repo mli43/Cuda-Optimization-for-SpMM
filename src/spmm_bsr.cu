@@ -70,18 +70,36 @@ DenseMatrix<T>* spmmBsrDevice(SparseMatrixBSR<T>* a, DenseMatrix<T>* b) {
 
 template <typename T>
 void runEngineBSR(SparseMatrixBSR<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
+    auto start = std::chrono::high_resolution_clock::now();
 
     // 1. Move to device
     SparseMatrixBSR<T>* da = a->copy2Device();
     DenseMatrix<T>* db = b->copy2Device();
+    auto copy_to_device_end = std::chrono::high_resolution_clock::now();
 
     // 2. Launch kernel
     auto cRes = spmmBsrDevice<T, double>(da, db);
+    auto kernel_end = std::chrono::high_resolution_clock::now();
+
     auto cResCpu = cRes->copy2Host();
-    cResCpu->save2File("bsr_cuda.res");
+    auto copy_to_host_end = std::chrono::high_resolution_clock::now();
 
     // 3. Check result
     auto cResSeq = spmmBsrCpu<T, double>(a, b);
+    auto seq_end = std::chrono::high_resolution_clock::now();
+
+    // 4. Report time 
+    auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_device_end - start);
+    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - copy_to_device_end);
+    auto copy2HostTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - kernel_end);
+    auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
+
+    std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
+              << "kernelTime (us):" << kernelTime.count() << ','
+              << "copy2HostTime (us):" << copy2HostTime.count() << ','
+              << "seqTime (us):" << seqTime.count() << '\n';
+
+    cResCpu->save2File("bsr_cuda.res");
     cResSeq->save2File("bsr_cpu.res");
 
     auto denseA = a->toDense();
