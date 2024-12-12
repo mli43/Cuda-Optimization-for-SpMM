@@ -1,8 +1,51 @@
 import os
 import sys
 from scipy.io import mmread
+from scipy.sparse import bsr_matrix
 import numpy as np
 
+def save_bsr_matrix(matrix, filename, block_size=(4, 4)):
+    """
+    Save a bsr_matrix to a file in the specified custom format.
+
+    Parameters:
+        matrix (bsr_matrix): The BSR matrix to save.
+        filename (str): Path to the file where the matrix will be saved.
+    """
+    if not isinstance(matrix, bsr_matrix):
+        raise ValueError("Input matrix must be a bsr_matrix.")
+    
+    matrix = matrix.tobsr(block_size, copy=True)
+
+    # Extract BSR matrix data
+    num_rows, num_cols = matrix.shape
+    block_size = matrix.blocksize
+    block_row_size, block_col_size = block_size
+    data = matrix.data
+    indices = matrix.indices
+    indptr = matrix.indptr
+
+    # Number of non-zero elements
+    nnz = data.size
+
+    # Number of blocks
+    num_blocks = len(indices)
+
+    with open(filename, 'w') as file:
+        # Write the header information
+        file.write(f"{num_rows} {num_cols} {nnz} {block_row_size} {block_col_size} {num_blocks}\n")
+
+        # Write block offsets (indptr)
+        file.write(" ".join(map(str, indptr)) + "\n")
+
+        # Write block column indices
+        file.write(" ".join(map(str, indices)) + "\n")
+
+        # Write the values of the blocks
+        for block in data:
+            print(block)
+            file.write(" ".join(map(str, block.flatten())) + "\n")
+    
 
 def process_mtx(directory):
     # Walk through the directory and its subdirectories
@@ -49,6 +92,7 @@ def process_mtx(directory):
                     # matrix_csc = mmread(mtx_file_path).tocsc()
                     matrix_coo = mmread(mtx_file_path).tocoo()
                     matrix_ell = mmread(mtx_file_path).tocsr()
+                    matrix_bsr = matrix.tobsr()
                 except Exception as e:
                     print(f"Error reading or converting {mtx_file_path}: {e}")
                     continue
@@ -58,6 +102,7 @@ def process_mtx(directory):
                 csr_file_path = os.path.join(root, f"{base_name}.csr")
                 # csc_file_path = os.path.join(root, f"{base_name}.csc")
                 coo_file_path = os.path.join(root, f"{base_name}.coo")
+                bsr_file_path = os.path.join(root, f"{base_name}.bsr")
                 ell_file_path_colind = os.path.join(root, f"{base_name}_colind.ell")
                 ell_file_path_values = os.path.join(root, f"{base_name}_values.ell")
                 
@@ -157,7 +202,8 @@ def process_mtx(directory):
                         for row in colind:
                             value_file.write(" ".join(map(str, row)) + "\n")
                         print(f"Saved ELL values to {ell_file_path_values}")
-
+                    
+                    save_bsr_matrix(matrix_bsr, bsr_file_path)
                         
                 except Exception as e:
                     print(f"Error writing to {csr_file_path}: {e}")
