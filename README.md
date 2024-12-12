@@ -3,6 +3,7 @@ This is the project repo for CMU 15618 final project
 
 ## Reports
 [Proposal](reports/proposal.pdf)
+
 [Milestone](reports/milestone.pdf)
 
 
