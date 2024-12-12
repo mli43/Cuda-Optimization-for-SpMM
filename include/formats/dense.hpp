@@ -24,6 +24,7 @@ template <typename T> class DenseMatrix : public Matrix {
     DenseMatrix(std::string filePath) {
         // Files contains only row-major contents
         this->ordering = ORDERING::ROW_MAJOR;
+        this->data = nullptr;
         this->onDevice = false;
 
         std::ifstream inputFile(filePath);
@@ -37,7 +38,7 @@ template <typename T> class DenseMatrix : public Matrix {
         inputFile >> this->numRows >> this->numCols;
         std::getline(inputFile, line); // Discard the header line
 
-        this->allocateSpace(this->onDevicel);
+        this->allocateSpace(this->onDevice);
 
         for (int i = 0; i < this->numRows; i++) {
             std::getline(inputFile, line);
@@ -59,14 +60,14 @@ template <typename T> class DenseMatrix : public Matrix {
         this->allocateSpace(onDevice);
     }
 
-    DenseMatrix(DenseMatrix<T>* source, bool onDeice) {
+    DenseMatrix(DenseMatrix<T>* source, bool onDevice) {
         this->numRows = source->numRows;
         this->numCols = source->numCols;
         this->onDevice = onDevice;
         this->ordering = source->ordering;
         this->data = nullptr;
         this->allocateSpace(this->onDevice);
-        this->copyData(source, this->onDevice);
+        this->copyData(source);
     }
 
     ~DenseMatrix() {
@@ -76,14 +77,14 @@ template <typename T> class DenseMatrix : public Matrix {
     /**
      * @brief Copy only pointer-like data
      */
-    bool copyData(DenseMatrix<T>* source, bool onDeice) {
+    bool copyData(DenseMatrix<T>* source) {
         this->assertSameShape(source);
         cudaMemcpyKind type;
-        if (source->onDevice && onDevice) {
+        if (source->onDevice && this->onDevice) {
             type = cudaMemcpyDeviceToDevice;
-        } else if (source->onDevice && !onDevice) {
+        } else if (source->onDevice && !this->onDevice) {
             type = cudaMemcpyDeviceToHost;
-        } else if (!source->onDevice && onDevice) {
+        } else if (!source->onDevice && this->onDevice) {
             type = cudaMemcpyHostToDevice;
         } else {
             type = cudaMemcpyHostToHost;
@@ -155,7 +156,16 @@ template <typename T> class DenseMatrix : public Matrix {
         }
 
         this->freeSpace();
-        this->data = newData;
+        this->allocateSpace(this->onDevice);
+        if (this->onDevice) {
+            cudaCheckError(cudaMemcpy(this->data, newData, totalSize, cudaMemcpyHostToDevice));
+        } else {
+            this->data = newData;
+        }
+
+        this->ordering = newOrdering;
+
+        return true;
     }
 
     bool save2File(std::string filePath) {
@@ -193,6 +203,7 @@ template <typename T> class DenseMatrix : public Matrix {
                 &this->data, totalSize));
             std::memset(this->data, 0, totalSize);
         }
+        this->onDevice = onDevice;
 
         return true;
     }
@@ -203,6 +214,7 @@ template <typename T> class DenseMatrix : public Matrix {
         } else {
             cudaCheckError(cudaFreeHost(this->data));
         }
+        this->data = nullptr;
         return true;
     }
 };
