@@ -6,6 +6,11 @@
 
 namespace cuspmm {
 
+enum ORDERING {
+    ROW_MAJOR,
+    COL_MAJOR,
+};
+
 
 class Matrix{
 public:

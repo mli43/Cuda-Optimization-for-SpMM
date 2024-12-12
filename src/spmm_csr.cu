@@ -1,11 +1,15 @@
 #include "cuda_utils.hpp"
+#include "formats/dense.hpp"
+#include "formats/sparse_csr.hpp"
 #include "torch/torch.h"
 #include "spmm_csr.hpp"
+#include "spmm_cusparse.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 
 namespace cuspmm {
 
@@ -57,6 +61,20 @@ DenseMatrix<T>* spmmCsrDevice(SparseMatrixCSR<T>* a, DenseMatrix<T>* b) {
     );
 
     return c;
+}
+
+template <typename T>
+void spmmCsrCuSparse(SparseMatrixCSR<T>* a, DenseMatrix<T> b) {
+    cusparseHandle_t handle;
+    cusparseSpMatDescr_t matA;
+    cusparseDnMatDescr_t matB, matC;
+
+    CHECK_CUSPARSE(cusparseCreate(&handle));
+    // FIXME: Only supports float right not!
+    CHECK_CUSPARSE(cusparseCreateCsr(&matA, a->numRows, a->numCols, a->numNonZero, a->rowPtrs, a->colIdxs, a->data, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_C_32F));
+    
+    throw std::runtime_error("Not implemented");
+
 }
 
 template <typename T>
