@@ -17,5 +17,10 @@ compile_commands.json
 *.out
 *.except
 
+# res
+*.res
+
+local_test
+
 id_ed25519
 .ipynb_checkpoints/

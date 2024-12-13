@@ -8,31 +8,34 @@
 
 namespace cuspmm {
 
-template <typename T> class SparseMatrixCSR : public SparseMatrix<T> {
+template<typename _dataT, typename _metaT>   
+class SparseMatrixCSR : public SparseMatrix<_dataT, _metaT> {
   public:
-    Matrix::metadataType *rowPtrs;
-    Matrix::metadataType *colIdxs;
+    using DT = _dataT;
+    using MT = _metaT;
+    MT *rowPtrs;
+    MT *colIdxs;
 
     SparseMatrixCSR();
 
     SparseMatrixCSR(std::string filePath);
 
-    SparseMatrixCSR(Matrix::metadataType numRows, Matrix::metadataType numCols,
-                    Matrix::metadataType numNonZero, bool onDevice);
+    SparseMatrixCSR(MT numRows, MT numCols,
+                    MT numNonZero, bool onDevice);
 
     ~SparseMatrixCSR();
 
     void setCusparseSpMatDesc(cusparseSpMatDescr_t* matDescP) override;
     cusparseSpMMAlg_t getCusparseAlg() override;
 
-    SparseMatrixCSR<T> *copy2Device();
+    SparseMatrixCSR<DT, MT> *copy2Device();
 
     bool allocateSpace(bool onDevice);
 
-    DenseMatrix<T> *toDense();
+    DenseMatrix<DT, MT> *toDense();
 
-    template<typename U>
-    friend std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<U> &m);
+    template<typename U, typename MT>
+    friend std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<U, MT> &m);
 };
 
 } // namespace cuspmm

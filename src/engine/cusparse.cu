@@ -1,15 +1,16 @@
+#include "commons.hpp"
+#include "formats/dense.hpp"
 #include "spmm_cusparse.hpp"
 #include "format.hpp"
+#include <cstdint>
 
 namespace cuspmm {
 
-template <typename DataT>
-DenseMatrix<DataT>* cusparseTest(SparseMatrix<DataT>* a, DenseMatrix<DataT>* b) {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>* cusparseTest(SparseMatrix<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
     cusparseHandle_t handle;
     cusparseSpMatDescr_t matA;
     cusparseDnMatDescr_t matB, matC;
-
-    DenseMatrix<DataT>* c = new DenseMatrix<DataT>(a->numRows, b->numCols, true, ORDERING::ROW_MAJOR);
 
     if (b->ordering != ORDERING::COL_MAJOR) {
         b->toOrdering(ORDERING::COL_MAJOR);
@@ -44,14 +45,16 @@ DenseMatrix<DataT>* cusparseTest(SparseMatrix<DataT>* a, DenseMatrix<DataT>* b) 
     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
     auto epilogueTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
 
-    std::cout << "cusparse prep time (us):" << prepTime.count() << ','
+    std::cout << __func__ << ' '
+              << "cusparse prep time (us):" << prepTime.count() << ','
               << "cusparse kernel time (us):" << kernelTime.count() << ','
               << "cusparse epilogue time (us):" << epilogueTime.count() << std::endl;
     
     return c;
 }
 
-template DenseMatrix<float>* cusparseTest(SparseMatrix<float>* a, DenseMatrix<float>* b);
+template DenseMatrix<float, uint32_t>* cusparseTest(SparseMatrix<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
+template DenseMatrix<double, uint32_t>* cusparseTest(SparseMatrix<double, uint32_t>* a, DenseMatrix<double, uint32_t>* b, DenseMatrix<double, uint32_t>* c);
 
 }
 

@@ -1,56 +1,105 @@
 #include "format.hpp"
+#include "formats/matrix.hpp"
+#include "engine/cusparse.hpp"
+#include "engine/engine_bsr.hpp"
+#include "torch/torch.h"
+#include <ATen/ops/miopen_convolution_transpose_ops.h>
+#include <cstdint>
+#include <memory>
+#include <torch/types.h>
+#include <type_traits>
+#include "engine.hpp"
 
 namespace cuspmm {
-// template <typename MatT>
-// void runEngine(MatT *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
-//     auto start = std::chrono::high_resolution_clock::now();
+template <typename DT, typename DenseMatT>
+inline torch::Tensor toTorch(DenseMatT* res) {
+    if constexpr (std::is_same_v<DT, half>) {
+        auto options = torch::TensorOptions().dtype(torch::kFloat16).requires_grad(false);
+        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
+    }
+    if constexpr (std::is_same_v<DT, float>) {
+        auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
+        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
+    }
+    if constexpr (std::is_same_v<DT, double>) {
+        auto options = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(false);
+        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
+    }
+}
 
-//     // 1. Move to device
-//     SparseMatrixCOO<T>* da = a->copy2Device();
-//     DenseMatrix<T>* db = b->copy2Device();
-//     auto copy_to_device_end = std::chrono::high_resolution_clock::now();
+template <typename EngT>
+void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, float abs_tol, float rel_tol) {
+    using ma_t = typename EngT::MataT;
+    using mb_t = typename EngT::MatbT;
+    mb_t* c = new mb_t(a->numRows, b->numCols, false, ORDERING::ROW_MAJOR);
+    auto t1 = std::chrono::high_resolution_clock::now();
 
-//     // 2. Launch kernel
-//     auto cRes = spmmCooDevice<T, double>(da, db);
-//     auto kernel_end = std::chrono::high_resolution_clock::now();
+    // 1. Move to device
+    ma_t* da = a->copy2Device();
+    mb_t* db = b->copy2Device();
+    mb_t* dc = c->copy2Device();
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << "\n";
 
-//     auto cResCpu = cRes->copy2Host();
-//     auto copy_to_host_end = std::chrono::high_resolution_clock::now();
+    // 2. Run CPU version
+    auto t3 = std::chrono::high_resolution_clock::now();
+    auto cpuResCpu = reinterpret_cast<mb_t*>(engine->runKernel(0, a, b, c));
+    auto t4 = std::chrono::high_resolution_clock::now();
+    auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
+    std::cout << "seqTime (us):" << seqTime.count() << "\n";
 
-//     // 3. Check result
-//     auto cResSeq = spmmCooCpu<T, double>(a, b);
-//     auto seq_end = std::chrono::high_resolution_clock::now();
+    // Create a torch version cpu result
+    torch::Tensor cpuResTorch = toTorch<typename mb_t::DT, mb_t>(cpuResCpu);
+    cpuResCpu->save2File(engine->fmt + "_cpu.res");
 
-//     // 4. Report time 
-//     auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_device_end - start);
-//     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - copy_to_device_end);
-//     auto copy2HostTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - kernel_end);
-//     auto parallelTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - start);
-//     auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
+    // 2. Launch kernel
+    auto kernel_start = std::chrono::high_resolution_clock::now();
+    auto kRes = reinterpret_cast<mb_t*>(engine->runKernel(-1, da, db, dc));
+    auto kernel_end = std::chrono::high_resolution_clock::now();
+    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - kernel_start);
 
-//     std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
-//               << "kernelTime (us):" << kernelTime.count() << ','
-//               << "copy2HostTime (us):" << copy2HostTime.count() << ','
-//               << "parallelTime (us):" << parallelTime.count() << ','
-//               << "seqTime (us):" << seqTime.count() << '\n';
+    auto kResCpu = kRes->copy2Host();
+    torch::Tensor kResTorch = toTorch<typename mb_t::DT, mb_t>(kResCpu);
 
+    std::cout << "All kernels take " << kernelTime.count() << "(us), allclose result: " <<
+        torch::allclose(cpuResTorch, kResTorch, rel_tol, abs_tol) << std::endl;
+    
+    // ! Don't delete kRes here! Since it uses dc's mem
+    delete kResCpu;
 
-//     cResCpu->save2File("coo_cuda.res");
-//     cResSeq->save2File("coo_cpu.res");
+    // Test cusparse
+    if (engine->SUPPORT_CUSPARSE) {
+        auto* _newB = new mb_t(b, false);
+        _newB->toOrdering(ORDERING::COL_MAJOR);
+        auto* newB = _newB->copy2Device();
+        cusparseTest<typename ma_t::DT, typename ma_t::MT>(reinterpret_cast<ma_t*>(da), reinterpret_cast<mb_t*>(newB), reinterpret_cast<mb_t*>(dc));
+        delete _newB;
+        delete newB;
+    }
 
-//     auto denseA = a->toDense();
-//     auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
-//     torch::Tensor taDevice = torch::from_blob(denseA->data, {denseA->numRows, denseA->numCols}, options).clone().cuda();
-//     torch::Tensor tbDevice = torch::from_blob(b->data, {b->numRows, b->numCols}, options).clone().cuda();
-//     torch::Tensor tcCpu = torch::from_blob(cResCpu->data, {cResCpu->numRows, cResCpu->numCols}, options).clone();
-//     torch::Tensor cResTorch = torch::matmul(taDevice, tbDevice).cpu();
-//     std::cout << "coo allclose: " << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
+    // Release memory
+    delete c;
+    delete dc;
+}
 
-//     auto denseTorch = new DenseMatrix<T>(cResCpu->numRows, cResCpu->numCols, false);
-//     std::memcpy(denseTorch->data, cResTorch.data_ptr<float>(), denseTorch->numRows * denseTorch->numCols * sizeof(float));
-//     denseTorch->save2File("coo_torch.res");
-// }
+#define ENG_INST(fmt, dt, mt, acct) \
+template void runEngine<Engine##fmt<dt, mt, acct>>(Engine##fmt<dt, mt, acct>* engine, Engine##fmt<dt, mt, acct>::MataT* a, Engine##fmt<dt, mt, acct>::MatbT* b, float abs_tol, float rel_tol); \
 
-// template void runEngine<float>(SparseMatrix<float> *a, DenseMatrix<float>* b, float abs_tol, double rel_tol);
+// BSR
+ENG_INST(BSR, float, uint32_t, double);
+ENG_INST(BSR, double, uint32_t, double);
+
+// COO
+ENG_INST(COO, float, uint32_t, double);
+ENG_INST(COO, double, uint32_t, double);
+
+// CSR
+ENG_INST(CSR, float, uint32_t, double);
+ENG_INST(CSR, double, uint32_t, double);
+
+// ELL
+ENG_INST(ELL, float, uint32_t, double);
+ENG_INST(ELL, double, uint32_t, double);
 
 } // namespace cuspmm

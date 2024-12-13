@@ -2,14 +2,14 @@
 #include "formats/sparse_csr.hpp"
 
 namespace cuspmm {
-template <typename T>
-SparseMatrixCSR<T>::SparseMatrixCSR() : SparseMatrix<T>() {
+template <typename DT, typename MT>
+SparseMatrixCSR<DT, MT>::SparseMatrixCSR() : SparseMatrix<DT, MT>() {
     this->rowPtrs = nullptr;
     this->colIdxs = nullptr;
 }
 
-template <typename T>
-SparseMatrixCSR<T>::SparseMatrixCSR(std::string filePath)
+template <typename DT, typename MT>
+SparseMatrixCSR<DT, MT>::SparseMatrixCSR(std::string filePath)
     : rowPtrs(nullptr), colIdxs(nullptr) {
     this->onDevice = false;
 
@@ -50,10 +50,10 @@ SparseMatrixCSR<T>::SparseMatrixCSR(std::string filePath)
     }
 }
 
-template <typename T>
-SparseMatrixCSR<T>::SparseMatrixCSR(Matrix::metadataType numRows,
-                                    Matrix::metadataType numCols,
-                                    Matrix::metadataType numNonZero,
+template <typename DT, typename MT>
+SparseMatrixCSR<DT, MT>::SparseMatrixCSR(MT numRows,
+                                    MT numCols,
+                                    MT numNonZero,
                                     bool onDevice)
     : rowPtrs(nullptr), colIdxs(nullptr) {
     this->numRows = numRows;
@@ -63,7 +63,7 @@ SparseMatrixCSR<T>::SparseMatrixCSR(Matrix::metadataType numRows,
     this->allocateSpace(onDevice);
 }
 
-template <typename T> SparseMatrixCSR<T>::~SparseMatrixCSR() {
+template <typename DT, typename MT> SparseMatrixCSR<DT, MT>::~SparseMatrixCSR() {
     if (this->rowPtrs != nullptr) {
         if (this->onDevice) {
             cudaCheckError(cudaFree(this->rowPtrs));
@@ -89,17 +89,17 @@ template <typename T> SparseMatrixCSR<T>::~SparseMatrixCSR() {
     }
 }
 
-template <typename T>
-void SparseMatrixCSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+template <typename DT, typename MT>
+void SparseMatrixCSR<DT, MT>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
     cudaDataType dt;
-    if constexpr (std::is_same<T, half>::value) {
+    if constexpr (std::is_same<DT, half>::value) {
         dt = CUDA_R_16F;
-    } else if constexpr (std::is_same<T, float>::value) {
+    } else if constexpr (std::is_same<DT, float>::value) {
         dt = CUDA_R_32F;
-    } else if constexpr (std::is_same<T, double>::value) {
+    } else if constexpr (std::is_same<DT, double>::value) {
         dt = CUDA_R_64F;
     }
-    assertTypes3(T, half, float, double);
+    assertTypes3(DT, half, float, double);
 
     CHECK_CUSPARSE(cusparseCreateCsr(matDescP, this->numRows, this->numCols, this->numNonZero, this->rowPtrs,
                       this->colIdxs, this->data, CUSPARSE_INDEX_32I,
@@ -107,66 +107,66 @@ void SparseMatrixCSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
 }
 
 
-template <typename T> SparseMatrixCSR<T> *SparseMatrixCSR<T>::copy2Device() {
+template <typename DT, typename MT> SparseMatrixCSR<DT, MT> *SparseMatrixCSR<DT, MT>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
 
-    SparseMatrixCSR<T> *newMatrix = new SparseMatrixCSR<T>(
+    SparseMatrixCSR<DT, MT> *newMatrix = new SparseMatrixCSR<DT, MT>(
         this->numRows, this->numCols, this->numNonZero, true);
 
     cudaCheckError(
         cudaMemcpy(newMatrix->rowPtrs, this->rowPtrs,
-                   (this->numRows + 1) * sizeof(Matrix::metadataType),
+                   (this->numRows + 1) * sizeof(DT),
                    cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->colIdxs, this->colIdxs,
-                              this->numNonZero * sizeof(Matrix::metadataType),
+                              this->numNonZero * sizeof(DT),
                               cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->data, this->data,
-                              this->numNonZero * sizeof(T),
+                              this->numNonZero * sizeof(DT),
                               cudaMemcpyHostToDevice));
     return newMatrix;
 }
 
-template <typename T> bool SparseMatrixCSR<T>::allocateSpace(bool onDevice) {
+template <typename DT, typename MT> bool SparseMatrixCSR<DT, MT>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
     if (onDevice) {
-        cudaCheckError(cudaMalloc(&this->data, this->numNonZero * sizeof(T)));
+        cudaCheckError(cudaMalloc(&this->data, this->numNonZero * sizeof(DT)));
         cudaCheckError(
             cudaMalloc(&this->rowPtrs,
-                       (this->numRows + 1) * sizeof(Matrix::metadataType)));
+                       (this->numRows + 1) * sizeof(DT)));
         cudaCheckError(cudaMalloc(
-            &this->colIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
-        cudaCheckError(cudaMemset(this->data, 0, this->numNonZero * sizeof(T)));
+            &this->colIdxs, this->numNonZero * sizeof(DT)));
+        cudaCheckError(cudaMemset(this->data, 0, this->numNonZero * sizeof(DT)));
         cudaCheckError(
             cudaMemset(this->rowPtrs, 0,
-                       (this->numRows + 1) * sizeof(Matrix::metadataType)));
+                       (this->numRows + 1) * sizeof(DT)));
         cudaCheckError(cudaMemset(
-            this->colIdxs, 0, this->numNonZero * sizeof(Matrix::metadataType)));
+            this->colIdxs, 0, this->numNonZero * sizeof(DT)));
     } else {
         cudaCheckError(
-            cudaMallocHost(&this->data, this->numNonZero * sizeof(T)));
+            cudaMallocHost(&this->data, this->numNonZero * sizeof(DT)));
         cudaCheckError(
             cudaMallocHost(&this->rowPtrs,
-                           (this->numRows + 1) * sizeof(Matrix::metadataType)));
+                           (this->numRows + 1) * sizeof(DT)));
         cudaCheckError(cudaMallocHost(
-            &this->colIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
-        std::memset(this->data, 0, this->numNonZero * sizeof(T));
+            &this->colIdxs, this->numNonZero * sizeof(DT)));
+        std::memset(this->data, 0, this->numNonZero * sizeof(DT));
         std::memset(this->rowPtrs, 0,
-                    (this->numRows + 1) * sizeof(Matrix::metadataType));
+                    (this->numRows + 1) * sizeof(DT));
         std::memset(this->colIdxs, 0,
-                    this->numNonZero * sizeof(Matrix::metadataType));
+                    this->numNonZero * sizeof(DT));
     }
 
     return true;
 }
 
-template <typename T> DenseMatrix<T> *SparseMatrixCSR<T>::toDense() {
+template <typename DT, typename MT> DenseMatrix<DT, MT> *SparseMatrixCSR<DT, MT>::toDense() {
     assert(!this->onDevice);
 
-    using mt = Matrix::metadataType;
+    using mt = MT;
 
-    DenseMatrix<T> *dm =
-        new DenseMatrix<T>(this->numRows, this->numCols, false);
+    DenseMatrix<DT, MT> *dm =
+        new DenseMatrix<DT, MT>(this->numRows, this->numCols, false);
 
     for (mt r = 0; r < this->numRows; r++) {
         mt row_start = this->rowPtrs[r];
@@ -179,13 +179,13 @@ template <typename T> DenseMatrix<T> *SparseMatrixCSR<T>::toDense() {
     return dm;
 }
 
-template <typename T>
-cusparseSpMMAlg_t SparseMatrixCSR<T>::getCusparseAlg() {
+template <typename DT, typename MT>
+cusparseSpMMAlg_t SparseMatrixCSR<DT, MT>::getCusparseAlg() {
     return CUSPARSE_SPMM_CSR_ALG2;
 }
 
-template <typename T>
-std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<T> &m) {
+template <typename DT, typename MT>
+std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<DT, MT> &m) {
     out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero << std::endl;
     for (size_t i = 0; i < m.numRows; i++) {
         out << m.rowPtrs[i] << ' ';
@@ -205,7 +205,7 @@ std::ostream &operator<<(std::ostream &out, SparseMatrixCSR<T> &m) {
     return out;
 }
 
-template class SparseMatrixCSR<float>;
-template class SparseMatrixCSR<double>;
+template class SparseMatrixCSR<float, uint32_t>;
+template class SparseMatrixCSR<double, uint32_t>;
 
 } // namespace cuspmm

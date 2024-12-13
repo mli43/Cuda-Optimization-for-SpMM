@@ -1,15 +1,16 @@
+#include "commons.hpp"
 #include "formats/sparse_ell.hpp"
 
 namespace cuspmm {
 
-template <typename T>
-SparseMatrixELL<T>::SparseMatrixELL() : SparseMatrix<T>() {
+template <typename DT, typename MT>
+SparseMatrixELL<DT, MT>::SparseMatrixELL() : SparseMatrix<DT, MT>() {
     this->rowIdxs = nullptr;
     this->maxColNnz = 0;
 }
 
-template <typename T>
-SparseMatrixELL<T>::SparseMatrixELL(std::string rowindPath,
+template <typename DT, typename MT>
+SparseMatrixELL<DT, MT>::SparseMatrixELL(std::string rowindPath,
                                     std::string valuesPath) {
     this->rowIdxs = nullptr;
     this->onDevice = false;
@@ -53,11 +54,12 @@ SparseMatrixELL<T>::SparseMatrixELL(std::string rowindPath,
     valuesFile.close();
 }
 
-template <typename T>
-SparseMatrixELL<T>::SparseMatrixELL(Matrix::metadataType numRows,
-                                    Matrix::metadataType numCols,
-                                    Matrix::metadataType numNonZero,
-                                    Matrix::metadataType maxColNnz,
+
+template <typename DT, typename MT>
+SparseMatrixELL<DT, MT>::SparseMatrixELL(MT numRows,
+                                    MT numCols,
+                                    MT numNonZero,
+                                    MT maxColNnz,
                                     bool onDevice) {
     this->numRows = numRows;
     this->numCols = numCols;
@@ -69,7 +71,7 @@ SparseMatrixELL<T>::SparseMatrixELL(Matrix::metadataType numRows,
     this->allocateSpace(onDevice);
 }
 
-template <typename T> SparseMatrixELL<T>::~SparseMatrixELL() {
+template <typename DT, typename MT> SparseMatrixELL<DT, MT>::~SparseMatrixELL() {
     if (this->rowIdxs != nullptr) {
         if (this->onDevice) {
             cudaCheckError(cudaFree(this->rowIdxs));
@@ -87,82 +89,82 @@ template <typename T> SparseMatrixELL<T>::~SparseMatrixELL() {
     }
 }
 
-template <typename T>
-void SparseMatrixELL<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+template <typename DT, typename MT>
+void SparseMatrixELL<DT, MT>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
     cudaDataType dt;
-    if constexpr (std::is_same<T, half>::value) {
+    if constexpr (std::is_same<DT, half>::value) {
         dt = CUDA_R_16F;
-    } else if constexpr (std::is_same<T, float>::value) {
+    } else if constexpr (std::is_same<DT, float>::value) {
         dt = CUDA_R_32F;
-    } else if constexpr (std::is_same<T, double>::value) {
+    } else if constexpr (std::is_same<DT, double>::value) {
         dt = CUDA_R_64F;
     }
-    assertTypes3(T, half, float, double);
+    assertTypes3(DT, half, float, double);
 
     // FIXME:
     throw std::runtime_error("not implemented");
 }
 
-template <typename T>
-cusparseSpMMAlg_t SparseMatrixELL<T>::getCusparseAlg() {
+template <typename DT, typename MT>
+cusparseSpMMAlg_t SparseMatrixELL<DT, MT>::getCusparseAlg() {
     return CUSPARSE_SPMM_ALG_DEFAULT;
 }
 
-template <typename T> bool SparseMatrixELL<T>::allocateSpace(bool onDevice) {
+template <typename DT, typename MT> bool SparseMatrixELL<DT, MT>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
     assert(this->rowIdxs == nullptr);
     if (onDevice) {
 
         cudaCheckError(cudaMalloc(&this->data,
-                                  this->numCols * this->maxColNnz * sizeof(T)));
+                                  this->numCols * this->maxColNnz * sizeof(DT)));
         cudaCheckError(
             cudaMalloc(&this->rowIdxs, this->numCols * this->maxColNnz *
-                                           sizeof(Matrix::metadataType)));
+                                           sizeof(MT)));
         cudaCheckError(cudaMemset(this->data, 0,
-                                  this->numCols * this->maxColNnz * sizeof(T)));
+                                  this->numCols * this->maxColNnz * sizeof(DT)));
         cudaCheckError(cudaMemset(this->rowIdxs, 0,
                                   this->numCols * this->maxColNnz *
-                                      sizeof(Matrix::metadataType)));
+                                      sizeof(MT)));
     } else {
         cudaCheckError(cudaMallocHost(
-            &this->data, this->numCols * this->maxColNnz * sizeof(T)));
+            &this->data, this->numCols * this->maxColNnz * sizeof(DT)));
         cudaCheckError(
             cudaMallocHost(&this->rowIdxs, this->numCols * this->maxColNnz *
-                                               sizeof(Matrix::metadataType)));
-        std::memset(this->data, 0, this->numCols * this->maxColNnz * sizeof(T));
+                                               sizeof(MT)));
+        std::memset(this->data, 0, this->numCols * this->maxColNnz * sizeof(DT));
         std::memset(this->rowIdxs, 0,
                     this->numCols * this->maxColNnz *
-                        sizeof(Matrix::metadataType));
+                        sizeof(MT));
     }
 
     return true;
 }
 
-template <typename T> SparseMatrixELL<T> *SparseMatrixELL<T>::copy2Device() {
+template <typename DT, typename MT> SparseMatrixELL<DT, MT> *SparseMatrixELL<DT, MT>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
 
-    SparseMatrixELL<T> *newMatrix = new SparseMatrixELL<T>(
+    SparseMatrixELL<DT, MT> *newMatrix = new SparseMatrixELL<DT, MT>(
         this->numRows, this->numCols, this->numNonZero, this->maxColNnz, true);
 
     cudaCheckError(cudaMemcpy(newMatrix->rowIdxs, this->rowIdxs,
                               this->numCols* this->maxColNnz *
-                                  sizeof(Matrix::metadataType),
+                                  sizeof(MT),
                               cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->data, this->data,
-                              this->numCols * this->maxColNnz * sizeof(T),
+                              this->numCols * this->maxColNnz * sizeof(DT),
                               cudaMemcpyHostToDevice));
 
     return newMatrix;
 }
 
-template <typename T> DenseMatrix<T> *SparseMatrixELL<T>::toDense() {
+template <typename DT, typename MT> DenseMatrix<DT, MT> *SparseMatrixELL<DT, MT>::toDense() {
     assert(!this->onDevice);
 
-    using mt = Matrix::metadataType;
+    using mt = DT;
 
-    DenseMatrix<T> *dm =
-        new DenseMatrix<T>(this->numRows, this->numCols, false);
+    DenseMatrix<DT, MT> *dm =
+        new DenseMatrix<DT, MT>(this->numRows, this->numCols, false);
 
     for (size_t col = 0; col < this->numCols; col++) {
         size_t base = col * this->maxColNnz;
@@ -177,7 +179,7 @@ template <typename T> DenseMatrix<T> *SparseMatrixELL<T>::toDense() {
     return dm;
 }
 
-template class SparseMatrixELL<float>;
-template class SparseMatrixELL<double>;
+template class SparseMatrixELL<float, uint32_t>;
+template class SparseMatrixELL<double, uint32_t>;
 
 } // namespace cuspmm

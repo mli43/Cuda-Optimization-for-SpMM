@@ -15,33 +15,32 @@
 
 namespace cuspmm {
 
-template <typename T> class DenseMatrix : public Matrix {
+template<typename _dataT, typename _metaT> 
+class DenseMatrix : public Matrix<_dataT, _metaT> {
   public:
-    T *data;
+    using DT = _dataT;
+    using MT = _metaT;
+    DT *data;
     ORDERING ordering;
-    DenseMatrix() : Matrix() { this->data = nullptr; }
+    DenseMatrix() : Matrix<DT, MT>() { this->data = nullptr; }
 
     DenseMatrix(std::string filePath);
 
-    DenseMatrix(Matrix::metadataType numRows,
-                       Matrix::metadataType numCols, bool onDevice, ORDERING ordering = ORDERING::ROW_MAJOR);
+    DenseMatrix(MT numRows, MT numCols, bool onDevice, ORDERING ordering = ORDERING::ROW_MAJOR);
 
-    DenseMatrix(DenseMatrix<T>* source, bool onDevice);
+    DenseMatrix(DenseMatrix<DT, MT>* source, bool onDevice);
 
     ~DenseMatrix();
 
-    /**
-     * @brief Copy only pointer-like data
-     */
-    bool copyData(DenseMatrix<T>* source);
+    bool copyData(DenseMatrix<DT, MT>* source);
 
     void setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP);
 
-    void assertSameShape(DenseMatrix<T>* target);
+    void assertSameShape(DenseMatrix<DT, MT>* target);
 
-    DenseMatrix<T>* copy2Device();
+    DenseMatrix<DT, MT>* copy2Device();
 
-    DenseMatrix<T>* copy2Host();
+    DenseMatrix<DT, MT>* copy2Host();
 
     bool toOrdering(ORDERING newOrdering);
 

@@ -1,12 +1,12 @@
+#include "commons.hpp"
+#include "engine/engine_coo.hpp"
 #include "format.hpp"
-#include "spmm_coo.hpp"
-#include "spmm_csr.hpp"
-#include "spmm_bsr.hpp"
-#include "spmm_ell.hpp"
 #include "utils.hpp"
+#include "engine.hpp"
 #include "getopt.h"
 #include <algorithm>
 #include <bits/getopt_core.h>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -168,52 +168,41 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    cuspmm::DenseMatrix<float> *dense =
-        new cuspmm::DenseMatrix<float>(dense_file);
+    float abs_tol = 1.0e-3f;
+    double rel_tol = 1.0e-2f;
+    auto *dense = new cuspmm::DenseMatrix<float, uint32_t>(dense_file);
 
     if (TEST_COO) {
-        std::cout << "###COO,testCase:" << input_dirname << ',';
-        cuspmm::SparseMatrixCOO<float> *a =
-            new cuspmm::SparseMatrixCOO<float>(coo_file);
+        std::cout << "###\nCOO,testCase:" << input_dirname << '\n';
+        auto* a = new cuspmm::SparseMatrixCOO<float, uint32_t>(coo_file);
+        auto* engine = new cuspmm::EngineCOO<float, uint32_t, double>(input_dirname);
 
-        float abs_tol = 1.0e-3f;
-        double rel_tol = 1.0e-2f;
-
-        cuspmm::runEngineCOO<float>(a, dense, abs_tol, rel_tol);
+        cuspmm::runEngine(engine, a, dense, abs_tol, rel_tol);
     }
 
     if (TEST_CSR) {
-        std::cout << "###CSR,testCase:" << input_dirname << ',';
-        cuspmm::SparseMatrixCSR<float> *a =
-            new cuspmm::SparseMatrixCSR<float>(csr_file);
+        std::cout << "###\nCSR,testCase:" << input_dirname << '\n';
+        auto* a = new cuspmm::SparseMatrixCSR<float, uint32_t>(csr_file);
+        auto* engine = new cuspmm::EngineCSR<float, uint32_t, double>(input_dirname);
 
-        float abs_tol = 1.0e-3f;
-        double rel_tol = 1.0e-2f;
-
-        cuspmm::runEngineCSR<float>(a, dense, abs_tol, rel_tol);
+        cuspmm::runEngine(engine, a, dense, abs_tol, rel_tol);
     }
 
     if (TEST_BSR) {
-        std::cout << "###BSR,testCase:" << input_dirname << ',';
-        cuspmm::SparseMatrixBSR<float> *a =
-            new cuspmm::SparseMatrixBSR<float>(bsr_file);
+        std::cout << "###\nBSR,testCase:" << input_dirname << '\n';
+        auto* a = new cuspmm::SparseMatrixBSR<float, uint32_t>(bsr_file);
+        auto* engine = new cuspmm::EngineBSR<float, uint32_t, double>(input_dirname);
 
-        float abs_tol = 1.0e-3f;
-        double rel_tol = 1.0e-2f;
-
-        cuspmm::runEngineBSR<float>(a, dense, abs_tol, rel_tol);
+        cuspmm::runEngine(engine, a, dense, abs_tol, rel_tol);
 
     }
 
     if (TEST_ELL) {
-        std::cout << "###ELL,testCase:" << input_dirname << ',';
-        cuspmm::SparseMatrixELL<float> *a =
-            new cuspmm::SparseMatrixELL<float>(ell_rowind_file, ell_values_file_colmajor);
+        std::cout << "###\nELL,testCase:" << input_dirname << '\n';
+        auto* a = new cuspmm::SparseMatrixELL<float, uint32_t>(ell_rowind_file, ell_values_file_colmajor);
+        auto* engine = new cuspmm::EngineELL<float, uint32_t, double>(input_dirname);
 
-        float abs_tol = 1.0e-3f;
-        double rel_tol = 1.0e-2f;
-
-        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol);
+        cuspmm::runEngine(engine, a, dense, abs_tol, rel_tol);
     }
 
     return 0;

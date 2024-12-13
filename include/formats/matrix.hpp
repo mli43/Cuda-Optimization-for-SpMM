@@ -13,11 +13,14 @@ enum ORDERING {
 };
 
 
+template<typename _dataT, typename _metaT>
 class Matrix{
 public:
-    using metadataType = uint32_t;
-    metadataType numRows, numCols;
+    using DT = _dataT;
+    using MT = _metaT;
+    MT numRows, numCols;
     bool onDevice;
+
     Matrix() {
         this->numRows = 0;
         this->numCols = 0;
@@ -26,12 +29,14 @@ public:
 
 };
 
-template<typename T>
-class SparseMatrix : public Matrix{
+template<typename _dataT, typename _metaT>
+class SparseMatrix : public Matrix<_dataT, _metaT>{
 public:
-    metadataType numNonZero;
-    T* data;
-    SparseMatrix() : Matrix(){
+    using DT = _dataT;
+    using MT = _metaT;
+    MT numNonZero;
+    DT* data;
+    SparseMatrix() : Matrix<_dataT, _metaT>(){
         this->numNonZero = 0;
         this->data = nullptr;
     }

@@ -1,15 +1,16 @@
+#include "commons.hpp"
 #include "formats/sparse_coo.hpp"
 
 namespace cuspmm {
 
-template <typename T>
-SparseMatrixCOO<T>::SparseMatrixCOO() : SparseMatrix<T>() {
+template <typename DT, typename MT>
+SparseMatrixCOO<DT, MT>::SparseMatrixCOO() : SparseMatrix<DT, MT>() {
     this->rowIdxs = nullptr;
     this->colIdxs = nullptr;
 }
 
-template <typename T>
-SparseMatrixCOO<T>::SparseMatrixCOO(std::string filePath) {
+template <typename DT, typename MT>
+SparseMatrixCOO<DT, MT>::SparseMatrixCOO(std::string filePath) {
     this->rowIdxs = nullptr;
     this->colIdxs = nullptr;
     this->onDevice = false;
@@ -36,10 +37,10 @@ SparseMatrixCOO<T>::SparseMatrixCOO(std::string filePath) {
     inputFile.close();
 }
 
-template <typename T>
-SparseMatrixCOO<T>::SparseMatrixCOO(Matrix::metadataType numRows,
-                                    Matrix::metadataType numCols,
-                                    Matrix::metadataType numNonZero,
+template <typename DT, typename MT>
+SparseMatrixCOO<DT, MT>::SparseMatrixCOO(MT numRows,
+                                    MT numCols,
+                                    MT numNonZero,
                                     bool onDevice)
     : rowIdxs(nullptr), colIdxs(nullptr) {
     this->numRows = numRows;
@@ -49,7 +50,7 @@ SparseMatrixCOO<T>::SparseMatrixCOO(Matrix::metadataType numRows,
     this->allocateSpace(onDevice);
 }
 
-template <typename T> SparseMatrixCOO<T>::~SparseMatrixCOO() {
+template <typename DT, typename MT> SparseMatrixCOO<DT, MT>::~SparseMatrixCOO() {
     if (this->rowIdxs != nullptr) {
         if (this->onDevice) {
             cudaCheckError(cudaFree(this->rowIdxs));
@@ -75,17 +76,17 @@ template <typename T> SparseMatrixCOO<T>::~SparseMatrixCOO() {
     }
 }
 
-template <typename T>
-void SparseMatrixCOO<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+template <typename DT, typename MT>
+void SparseMatrixCOO<DT, MT>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
     cudaDataType dt;
-    if constexpr (std::is_same<T, half>::value) {
+    if constexpr (std::is_same<DT, half>::value) {
         dt = CUDA_R_16F;
-    } else if constexpr (std::is_same<T, float>::value) {
+    } else if constexpr (std::is_same<DT, float>::value) {
         dt = CUDA_R_32F;
-    } else if constexpr (std::is_same<T, double>::value) {
+    } else if constexpr (std::is_same<DT, double>::value) {
         dt = CUDA_R_64F;
     }
-    assertTypes3(T, half, float, double);
+    assertTypes3(DT, half, float, double);
 
     CHECK_CUSPARSE(cusparseCreateCoo(
         matDescP, this->numRows, this->numCols, this->numNonZero, this->rowIdxs,
@@ -93,69 +94,69 @@ void SparseMatrixCOO<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
         dt));
 }
 
-template <typename T>
-cusparseSpMMAlg_t SparseMatrixCOO<T>::getCusparseAlg() {
+template <typename DT, typename MT>
+cusparseSpMMAlg_t SparseMatrixCOO<DT, MT>::getCusparseAlg() {
     return CUSPARSE_SPMM_COO_ALG4;
 }
 
-template <typename T> SparseMatrixCOO<T> *SparseMatrixCOO<T>::copy2Device() {
+template <typename DT, typename MT> SparseMatrixCOO<DT, MT> *SparseMatrixCOO<DT, MT>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
 
-    SparseMatrixCOO<T> *newMatrix = new SparseMatrixCOO<T>(
+    SparseMatrixCOO<DT, MT> *newMatrix = new SparseMatrixCOO<DT, MT>(
         this->numRows, this->numCols, this->numNonZero, true);
 
     cudaCheckError(cudaMemcpy(newMatrix->rowIdxs, this->rowIdxs,
-                              this->numNonZero * sizeof(Matrix::metadataType),
+                              this->numNonZero * sizeof(DT),
                               cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->colIdxs, this->colIdxs,
-                              this->numNonZero * sizeof(Matrix::metadataType),
+                              this->numNonZero * sizeof(DT),
                               cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->data, this->data,
-                              this->numNonZero * sizeof(T),
+                              this->numNonZero * sizeof(DT),
                               cudaMemcpyHostToDevice));
     return newMatrix;
 }
 
-template <typename T> bool SparseMatrixCOO<T>::allocateSpace(bool onDevice) {
+template <typename DT, typename MT> bool SparseMatrixCOO<DT, MT>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
     assert(this->rowIdxs == nullptr);
     assert(this->colIdxs == nullptr);
     if (onDevice) {
-        cudaCheckError(cudaMalloc(&this->data, this->numNonZero * sizeof(T)));
+        cudaCheckError(cudaMalloc(&this->data, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMalloc(
-            &this->rowIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
+            &this->rowIdxs, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMalloc(
-            &this->colIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
-        cudaCheckError(cudaMemset(this->data, 0, this->numNonZero * sizeof(T)));
+            &this->colIdxs, this->numNonZero * sizeof(DT)));
+        cudaCheckError(cudaMemset(this->data, 0, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMemset(
-            this->rowIdxs, 0, this->numNonZero * sizeof(Matrix::metadataType)));
+            this->rowIdxs, 0, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMemset(
-            this->colIdxs, 0, this->numNonZero * sizeof(Matrix::metadataType)));
+            this->colIdxs, 0, this->numNonZero * sizeof(DT)));
     } else {
         cudaCheckError(
-            cudaMallocHost(&this->data, this->numNonZero * sizeof(T)));
+            cudaMallocHost(&this->data, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMallocHost(
-            &this->rowIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
+            &this->rowIdxs, this->numNonZero * sizeof(DT)));
         cudaCheckError(cudaMallocHost(
-            &this->colIdxs, this->numNonZero * sizeof(Matrix::metadataType)));
-        std::memset(this->data, 0, this->numNonZero * sizeof(T));
+            &this->colIdxs, this->numNonZero * sizeof(DT)));
+        std::memset(this->data, 0, this->numNonZero * sizeof(DT));
         std::memset(this->rowIdxs, 0,
-                    this->numNonZero * sizeof(Matrix::metadataType));
+                    this->numNonZero * sizeof(DT));
         std::memset(this->colIdxs, 0,
-                    this->numNonZero * sizeof(Matrix::metadataType));
+                    this->numNonZero * sizeof(DT));
     }
 
     return true;
 }
 
-template <typename T> DenseMatrix<T> *SparseMatrixCOO<T>::toDense() {
+template <typename DT, typename MT> DenseMatrix<DT, MT> *SparseMatrixCOO<DT, MT>::toDense() {
     assert(!this->onDevice);
 
-    using mt = Matrix::metadataType;
+    using mt = MT;
 
-    DenseMatrix<T> *dm =
-        new DenseMatrix<T>(this->numRows, this->numCols, false);
+    DenseMatrix<DT, MT> *dm =
+        new DenseMatrix<DT, MT>(this->numRows, this->numCols, false);
 
     for (size_t i = 0; i < this->numNonZero; i++) {
         mt r = this->rowIdxs[i];
@@ -166,8 +167,8 @@ template <typename T> DenseMatrix<T> *SparseMatrixCOO<T>::toDense() {
     return dm;
 }
 
-template <typename T>
-std::ostream &operator<<(std::ostream &out, SparseMatrixCOO<T> &m) {
+template <typename DT, typename MT>
+std::ostream &operator<<(std::ostream &out, SparseMatrixCOO<DT, MT> &m) {
     out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero << std::endl;
     for (size_t i = 0; i < m->numNonZero; i++) {
         std::cout << m.rowIdxs[i] << ' ' << m.colIdxs[i] << ' ' << m.data[i]
@@ -177,6 +178,6 @@ std::ostream &operator<<(std::ostream &out, SparseMatrixCOO<T> &m) {
     return out;
 }
 
-template class SparseMatrixCOO<float>;
-template class SparseMatrixCOO<double>;
+template class SparseMatrixCOO<float, uint32_t>;
+template class SparseMatrixCOO<double, uint32_t>;
 } // namespace cuspmm
