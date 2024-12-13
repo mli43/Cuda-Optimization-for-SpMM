@@ -1,8 +1,9 @@
+#include "commons.hpp"
 #include "formats/sparse_bsr.hpp"
 
 namespace cuspmm {
-template <typename T>
-SparseMatrixBSR<T>::SparseMatrixBSR() : SparseMatrix<T>() {
+template <typename DT, typename MT>
+SparseMatrixBSR<DT, MT>::SparseMatrixBSR() : SparseMatrix<DT, MT>() {
     this->blockRowSize = 0;
     this->blockColSize = 0;
     this->numBlocks = 0;
@@ -13,8 +14,8 @@ SparseMatrixBSR<T>::SparseMatrixBSR() : SparseMatrix<T>() {
     this->blockColIdxs = nullptr;
 }
 
-template <typename T>
-SparseMatrixBSR<T>::SparseMatrixBSR(std::string filePath) {
+template <typename DT, typename MT>
+SparseMatrixBSR<DT, MT>::SparseMatrixBSR(std::string filePath) {
     this->onDevice = false;
     this->blockRowPtrs = nullptr;
     this->blockColIdxs = nullptr;
@@ -59,13 +60,13 @@ SparseMatrixBSR<T>::SparseMatrixBSR(std::string filePath) {
     }
 }
 
-template <typename T>
-SparseMatrixBSR<T>::SparseMatrixBSR(Matrix::metadataType numRows,
-                                    Matrix::metadataType numCols,
-                                    Matrix::metadataType numNonZero,
-                                    Matrix::metadataType blockRowSize,
-                                    Matrix::metadataType blockColSize,
-                                    Matrix::metadataType numBlocks,
+template <typename DT, typename MT>
+SparseMatrixBSR<DT, MT>::SparseMatrixBSR(MT numRows,
+                                    MT numCols,
+                                    MT numNonZero,
+                                    MT blockRowSize,
+                                    MT blockColSize,
+                                    MT numBlocks,
                                     bool onDevice) {
     this->blockRowSize = blockRowSize;
     this->blockColSize = blockColSize;
@@ -86,8 +87,8 @@ SparseMatrixBSR<T>::SparseMatrixBSR(Matrix::metadataType numRows,
     this->assertCheck();
 }
 
-template <typename T>
-SparseMatrixBSR<T>::SparseMatrixBSR(SparseMatrixBSR<T> *target, bool onDevice) {
+template <typename DT, typename MT>
+SparseMatrixBSR<DT, MT>::SparseMatrixBSR(SparseMatrixBSR<DT, MT> *target, bool onDevice) {
     this->blockRowSize = target->blockRowSize;
     this->blockColSize = target->blockColSize;
     this->numBlocks = target->numBlocks;
@@ -108,7 +109,7 @@ SparseMatrixBSR<T>::SparseMatrixBSR(SparseMatrixBSR<T> *target, bool onDevice) {
     this->assertCheck();
 }
 
-template <typename T> SparseMatrixBSR<T>::~SparseMatrixBSR() {
+template <typename DT, typename MT> SparseMatrixBSR<DT, MT>::~SparseMatrixBSR() {
     if (this->blockRowPtrs != nullptr) {
         if (this->onDevice) {
             cudaCheckError(cudaFree(this->blockRowPtrs));
@@ -134,17 +135,17 @@ template <typename T> SparseMatrixBSR<T>::~SparseMatrixBSR() {
     }
 }
 
-template <typename T>
-void SparseMatrixBSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+template <typename DT, typename MT>
+void SparseMatrixBSR<DT, MT>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
     cudaDataType dt;
-    if constexpr (std::is_same<T, half>::value) {
+    if constexpr (std::is_same<DT, half>::value) {
         dt = CUDA_R_16F;
-    } else if constexpr (std::is_same<T, float>::value) {
+    } else if constexpr (std::is_same<DT, float>::value) {
         dt = CUDA_R_32F;
-    } else if constexpr (std::is_same<T, double>::value) {
+    } else if constexpr (std::is_same<DT, double>::value) {
         dt = CUDA_R_64F;
     }
-    assertTypes3(T, half, float, double);
+    assertTypes3(DT, half, float, double);
 
     CHECK_CUSPARSE(cusparseCreateBsr(
         matDescP, this->numBlockRows, (this->numCols / this->blockColSize),
@@ -153,13 +154,13 @@ void SparseMatrixBSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
         CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, dt, CUSPARSE_ORDER_ROW));
 }
 
-template <typename T>
-cusparseSpMMAlg_t SparseMatrixBSR<T>::getCusparseAlg() {
+template <typename DT, typename MT>
+cusparseSpMMAlg_t SparseMatrixBSR<DT, MT>::getCusparseAlg() {
     return CUSPARSE_SPMM_ALG_DEFAULT;
 }
 
-template <typename T>
-bool SparseMatrixBSR<T>::copyData(SparseMatrixBSR<T> *source, bool onDevice) {
+template <typename DT, typename MT>
+bool SparseMatrixBSR<DT, MT>::copyData(SparseMatrixBSR<DT, MT> *source, bool onDevice) {
     this->assertSameShape(source);
     cudaMemcpyKind type;
     if (source->onDevice && onDevice) {
@@ -174,32 +175,32 @@ bool SparseMatrixBSR<T>::copyData(SparseMatrixBSR<T> *source, bool onDevice) {
 
     cudaCheckError(cudaMemcpy(
         this->blockRowPtrs, source->blockRowPtrs,
-        (this->numBlockRows + 1) * sizeof(Matrix::metadataType), type));
+        (this->numBlockRows + 1) * sizeof(DT), type));
     cudaCheckError(cudaMemcpy(this->blockColIdxs, source->blockColIdxs,
-                              this->numBlocks * sizeof(Matrix::metadataType),
+                              this->numBlocks * sizeof(DT),
                               type));
     cudaCheckError(cudaMemcpy(this->data, source->data,
-                              this->numElements * sizeof(T), type));
+                              this->numElements * sizeof(DT), type));
 
     return true;
 }
 
-template <typename T> SparseMatrixBSR<T> *SparseMatrixBSR<T>::copy2Device() {
+template <typename DT, typename MT> SparseMatrixBSR<DT, MT> *SparseMatrixBSR<DT, MT>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
 
-    SparseMatrixBSR<T> *newMatrix = new SparseMatrixBSR<T>(this, true);
+    SparseMatrixBSR<DT, MT> *newMatrix = new SparseMatrixBSR<DT, MT>(this, true);
 
     return newMatrix;
 }
 
-template <typename T> void SparseMatrixBSR<T>::assertCheck() {
+template <typename DT, typename MT> void SparseMatrixBSR<DT, MT>::assertCheck() {
     assert(this->numRows % this->blockRowSize == 0);
     assert(this->numCols % this->blockColSize == 0);
 }
 
-template <typename T>
-void SparseMatrixBSR<T>::assertSameShape(SparseMatrixBSR<T> *target) {
+template <typename DT, typename MT>
+void SparseMatrixBSR<DT, MT>::assertSameShape(SparseMatrixBSR<DT, MT> *target) {
     assert(this->blockRowSize == target->blockRowSize &&
            this->blockColSize == target->blockColSize &&
            this->numBlocks == target->numBlocks &&
@@ -209,58 +210,58 @@ void SparseMatrixBSR<T>::assertSameShape(SparseMatrixBSR<T> *target) {
            this->numNonZero == target->numNonZero);
 }
 
-template <typename T> bool SparseMatrixBSR<T>::allocateSpace(bool onDevice) {
+template <typename DT, typename MT> bool SparseMatrixBSR<DT, MT>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
     if (onDevice) {
-        cudaCheckError(cudaMalloc(&this->data, this->numElements * sizeof(T)));
+        cudaCheckError(cudaMalloc(&this->data, this->numElements * sizeof(DT)));
         cudaCheckError(
-            cudaMemset(this->data, 0, this->numElements * sizeof(T)));
+            cudaMemset(this->data, 0, this->numElements * sizeof(DT)));
 
         cudaCheckError(
             cudaMalloc(&this->blockRowPtrs, (this->numBlockRows + 1) *
-                                                sizeof(Matrix::metadataType)));
+                                                sizeof(DT)));
         cudaCheckError(cudaMemset(this->blockRowPtrs, 0,
                                   (this->numBlockRows + 1) *
-                                      sizeof(Matrix::metadataType)));
+                                      sizeof(DT)));
 
         cudaCheckError(
             cudaMalloc(&this->blockColIdxs,
-                       this->numBlocks * sizeof(Matrix::metadataType)));
+                       this->numBlocks * sizeof(DT)));
         cudaCheckError(
             cudaMemset(this->blockColIdxs, 0,
-                       this->numBlocks * sizeof(Matrix::metadataType)));
+                       this->numBlocks * sizeof(DT)));
     } else {
         cudaCheckError(
-            cudaMallocHost(&this->data, this->numElements * sizeof(T)));
-        std::memset(this->data, 0, this->numElements * sizeof(T));
+            cudaMallocHost(&this->data, this->numElements * sizeof(DT)));
+        std::memset(this->data, 0, this->numElements * sizeof(DT));
 
         cudaCheckError(cudaMallocHost(&this->blockRowPtrs,
                                       (this->numBlockRows + 1) *
-                                          sizeof(Matrix::metadataType)));
+                                          sizeof(DT)));
         std::memset(this->blockRowPtrs, 0,
-                    (this->numBlockRows + 1) * sizeof(Matrix::metadataType));
+                    (this->numBlockRows + 1) * sizeof(DT));
 
         cudaCheckError(
             cudaMallocHost(&this->blockColIdxs,
-                           this->numBlocks * sizeof(Matrix::metadataType)));
+                           this->numBlocks * sizeof(DT)));
         std::memset(this->blockColIdxs, 0,
-                    this->numBlocks * sizeof(Matrix::metadataType));
+                    this->numBlocks * sizeof(DT));
     }
 
     return true;
 }
 
-template <typename T>
-SparseMatrixBSR<T> *
-SparseMatrixBSR<T>::fromDense(DenseMatrix<T> *dense,
-                              Matrix::metadataType blockRowSize,
-                              Matrix::metadataType blockColSize) {
+template <typename DT, typename MT>
+SparseMatrixBSR<DT, MT> *
+SparseMatrixBSR<DT, MT>::fromDense(DenseMatrix<DT, MT> *dense,
+                              MT blockRowSize,
+                              MT blockColSize) {
     throw std::runtime_error("Not Implemented");
-    const T zero = 0;
+    const DT zero = 0;
     assert(dense->numRows % blockRowSize == 0 &&
            dense->numCols % blockColSize == 0);
 
-    using mt = Matrix::metadataType;
+    using mt = MT;
     mt numBlockRows = dense->numRows / blockRowSize;
     mt numBlockCols = dense->numCols / blockColSize;
 
@@ -293,20 +294,20 @@ SparseMatrixBSR<T>::fromDense(DenseMatrix<T> *dense,
     return nullptr;
 }
 
-template <typename T> DenseMatrix<T> *SparseMatrixBSR<T>::toDense() {
+template <typename DT, typename MT> DenseMatrix<DT, MT> *SparseMatrixBSR<DT, MT>::toDense() {
     assert(!this->onDevice);
 
-    using mt = Matrix::metadataType;
+    using mt = MT;
 
-    DenseMatrix<T> *dm =
-        new DenseMatrix<T>(this->numRows, this->numCols, false);
+    DenseMatrix<DT, MT> *dm =
+        new DenseMatrix<DT, MT>(this->numRows, this->numCols, false);
 
     for (mt blockRow = 0; blockRow < this->numBlockRows; blockRow++) {
         mt blockRowStart = this->blockRowPtrs[blockRow];
         mt blockRowEnd = this->blockRowPtrs[blockRow + 1];
         for (mt blockIdx = blockRowStart; blockIdx < blockRowEnd; blockIdx++) {
             mt blockCol = this->blockColIdxs[blockIdx];
-            T *blockData = this->data +
+            DT *blockData = this->data +
                            (this->blockRowSize * this->blockColSize * blockIdx);
 
             mt denseRowStart = blockRow * this->blockRowSize;
@@ -324,8 +325,8 @@ template <typename T> DenseMatrix<T> *SparseMatrixBSR<T>::toDense() {
     return dm;
 }
 
-template <typename T>
-std::ostream &operator<<(std::ostream &out, SparseMatrixBSR<T> &m) {
+template <typename DT, typename MT>
+std::ostream &operator<<(std::ostream &out, SparseMatrixBSR<DT, MT> &m) {
     throw std::runtime_error("Not implemented");
     out << m.numRows << ' ' << m.numCols << ' ' << m.numNonZero << ' '
         << m.blockRowSize << ' ' << m.numBlocks << std::endl;
@@ -347,6 +348,6 @@ std::ostream &operator<<(std::ostream &out, SparseMatrixBSR<T> &m) {
     return out;
 }
 
-template class SparseMatrixBSR<float>;
-template class SparseMatrixBSR<double>;
+template class SparseMatrixBSR<float, uint32_t>;
+template class SparseMatrixBSR<double, uint32_t>;
 } // namespace cuspmm

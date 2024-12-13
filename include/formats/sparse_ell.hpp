@@ -8,17 +8,20 @@
 
 namespace cuspmm{
 
-template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
+template<typename _dataT, typename _metaT>    
+class SparseMatrixELL: public SparseMatrix<_dataT, _metaT> {
   public:
-    Matrix::metadataType *colIdxs;
-    Matrix::metadataType maxRowNnz;
+    using DT = _dataT;
+    using MT = _metaT;
+    MT *colIdxs;
+    MT maxRowNnz;
 
     SparseMatrixELL();
 
     SparseMatrixELL(std::string colindPath, std::string valuesPath);
 
-    SparseMatrixELL(Matrix::metadataType numRows, Matrix::metadataType numCols,
-                    Matrix::metadataType numNonZero, Matrix::metadataType maxRowNnz, 
+    SparseMatrixELL(MT numRows, MT numCols,
+                    MT numNonZero, MT maxRowNnz, 
                     bool onDevice);
 
     ~SparseMatrixELL();
@@ -28,10 +31,9 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
 
     bool allocateSpace(bool onDevice);
 
-    SparseMatrixELL<T> *copy2Device();
+    SparseMatrixELL<DT, MT> *copy2Device();
 
-    DenseMatrix<T> *toDense();
-
+    DenseMatrix<DT, MT> *toDense();
 };
 
 }

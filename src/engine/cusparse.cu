@@ -1,15 +1,16 @@
+#include "commons.hpp"
 #include "spmm_cusparse.hpp"
 #include "format.hpp"
 
 namespace cuspmm {
 
-template <typename DataT>
-DenseMatrix<DataT>* cusparseTest(SparseMatrix<DataT>* a, DenseMatrix<DataT>* b) {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>* cusparseTest(SparseMatrix<DT, MT>* a, DenseMatrix<DT, MT>* b) {
     cusparseHandle_t handle;
     cusparseSpMatDescr_t matA;
     cusparseDnMatDescr_t matB, matC;
 
-    DenseMatrix<DataT>* c = new DenseMatrix<DataT>(a->numRows, b->numCols, true, ORDERING::ROW_MAJOR);
+    DenseMatrix<DT, MT>* c = new DenseMatrix<DT, MT>(a->numRows, b->numCols, true, ORDERING::ROW_MAJOR);
 
     if (b->ordering != ORDERING::COL_MAJOR) {
         b->toOrdering(ORDERING::COL_MAJOR);
@@ -51,7 +52,7 @@ DenseMatrix<DataT>* cusparseTest(SparseMatrix<DataT>* a, DenseMatrix<DataT>* b) 
     return c;
 }
 
-template DenseMatrix<float>* cusparseTest(SparseMatrix<float>* a, DenseMatrix<float>* b);
+template DenseMatrix<float, uint32_t>* cusparseTest(SparseMatrix<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b);
 
 }
 

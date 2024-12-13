@@ -1,12 +1,12 @@
-#include "spmm_csr.hpp"
+#include "formats/sparse_csr.hpp"
 
 namespace cuspmm {
 
-template <typename T, typename AccT>
-DenseMatrix<T>* spmmCsrCpu(SparseMatrixCSR<T>* ma, DenseMatrix<T>* mb) {
-    using mt = Matrix::metadataType;
+template <typename DT, typename MT, typename AccT>
+DenseMatrix<DT, MT>* spmmCSRCpu(SparseMatrixCSR<DT, MT>* ma, DenseMatrix<DT, MT>* mb) {
+    using mt = MT;
 
-    DenseMatrix<T>* mc = new DenseMatrix<T>(ma->numRows, mb->numCols, false);
+    DenseMatrix<DT, MT>* mc = new DenseMatrix<DT, MT>(ma->numRows, mb->numCols, false);
 
     if (ma->onDevice || mb->onDevice) {
         std::cerr << "Device incorrect!" << std::endl; 
@@ -30,6 +30,6 @@ DenseMatrix<T>* spmmCsrCpu(SparseMatrixCSR<T>* ma, DenseMatrix<T>* mb) {
     return mc;
 }
 
-template DenseMatrix<float>* spmmCsrCpu<float, double>(SparseMatrixCSR<float>* ma, DenseMatrix<float>* mb);
+template DenseMatrix<float, uint32_t>* spmmCSRCpu<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* ma, DenseMatrix<float, uint32_t>* mb);
 
 }

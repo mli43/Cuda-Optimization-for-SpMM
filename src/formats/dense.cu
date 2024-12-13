@@ -1,10 +1,10 @@
+#include "commons.hpp"
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
-#include <type_traits>
 
 namespace cuspmm {
-template <typename T>
-DenseMatrix<T>::DenseMatrix(std::string filePath) {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>::DenseMatrix(std::string filePath) {
     // Files contains only row-major contents
     this->ordering = ORDERING::ROW_MAJOR;
     this->data = nullptr;
@@ -33,9 +33,9 @@ DenseMatrix<T>::DenseMatrix(std::string filePath) {
 
 }
 
-template <typename T>
-DenseMatrix<T>::DenseMatrix(Matrix::metadataType numRows,
-                    Matrix::metadataType numCols, bool onDevice, ORDERING ordering) {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>::DenseMatrix(MT numRows,
+                    MT numCols, bool onDevice, ORDERING ordering) {
     this->numRows = numRows;
     this->numCols = numCols;
     this->onDevice = onDevice;
@@ -44,8 +44,8 @@ DenseMatrix<T>::DenseMatrix(Matrix::metadataType numRows,
     this->allocateSpace(onDevice);
 }
 
-template <typename T>
-DenseMatrix<T>::DenseMatrix(DenseMatrix<T>* source, bool onDevice) {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>::DenseMatrix(DenseMatrix<DT, MT>* source, bool onDevice) {
     this->numRows = source->numRows;
     this->numCols = source->numCols;
     this->onDevice = onDevice;
@@ -55,36 +55,36 @@ DenseMatrix<T>::DenseMatrix(DenseMatrix<T>* source, bool onDevice) {
     this->copyData(source);
 }
 
-template <typename T>
-DenseMatrix<T>::~DenseMatrix() {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>::~DenseMatrix() {
     this->freeSpace();
 }
 
-template <typename T>
-void DenseMatrix<T>::setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP) {
+template <typename DT, typename MT>
+void DenseMatrix<DT, MT>::setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP) {
     cusparseOrder_t co;
     if (this->ordering == ORDERING::ROW_MAJOR) {
         co = CUSPARSE_ORDER_ROW;
     } else {
         co = CUSPARSE_ORDER_COL;
     }
-    if constexpr (std::is_same<T, half>::value) {
+    if constexpr (std::is_same<DT, half>::value) {
         CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
                         this->data, CUDA_R_16F, co));
     } 
-    if constexpr (std::is_same<T, float>::value) {
+    if constexpr (std::is_same<DT, float>::value) {
         CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
                         this->data, CUDA_R_32F, co));
     }
-    if constexpr (std::is_same<T, double>::value) {
+    if constexpr (std::is_same<DT, double>::value) {
         CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
                         this->data, CUDA_R_64F, co));
     } 
-    assertTypes3(T, half, float, double);
+    assertTypes3(DT, half, float, double);
 }
 
-template <typename T>
-bool DenseMatrix<T>::copyData(DenseMatrix<T>* source) {
+template <typename DT, typename MT>
+bool DenseMatrix<DT, MT>::copyData(DenseMatrix<DT, MT>* source) {
     this->assertSameShape(source);
     cudaMemcpyKind type;
     if (source->onDevice && this->onDevice) {
@@ -99,47 +99,47 @@ bool DenseMatrix<T>::copyData(DenseMatrix<T>* source) {
 
     cudaCheckError(
         cudaMemcpy(this->data, source->data,
-                    (this->numRows * this->numCols) * sizeof(T),
+                    (this->numRows * this->numCols) * sizeof(DT),
                     type));
     
     return true;
 }
 
-template <typename T>
-void DenseMatrix<T>::assertSameShape(DenseMatrix<T>* target) {
+template <typename DT, typename MT>
+void DenseMatrix<DT, MT>::assertSameShape(DenseMatrix<DT, MT>* target) {
     assert(
         this->numRows == target->numRows &&
         this->numCols == target->numCols
     );
 }
 
-template <typename T>
-DenseMatrix<T>* DenseMatrix<T>::copy2Device() {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>* DenseMatrix<DT, MT>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
 
-    DenseMatrix<T>* newMatrix = new DenseMatrix<T>(this, true);
+    DenseMatrix<DT, MT>* newMatrix = new DenseMatrix<DT, MT>(this, true);
     return newMatrix;
 }
 
-template <typename T>
-DenseMatrix<T>* DenseMatrix<T>::copy2Host() {
+template <typename DT, typename MT>
+DenseMatrix<DT, MT>* DenseMatrix<DT, MT>::copy2Host() {
     assert(this->onDevice == true);
     assert(this->data != nullptr);
 
-    DenseMatrix<T>* newMatrix = new DenseMatrix<T>(this, false);
+    DenseMatrix<DT, MT>* newMatrix = new DenseMatrix<DT, MT>(this, false);
     return newMatrix;
 }
 
-template <typename T>
-bool DenseMatrix<T>::toOrdering(ORDERING newOrdering) {
+template <typename DT, typename MT>
+bool DenseMatrix<DT, MT>::toOrdering(ORDERING newOrdering) {
     if (this->ordering == newOrdering) {
         return true;
     }
 
     // Malloc new space
-    size_t totalSize = this->numRows * this->numCols * sizeof(T);
-    T* newData;
+    size_t totalSize = this->numRows * this->numCols * sizeof(DT);
+    DT* newData;
     cudaCheckError(cudaMallocHost(&newData, totalSize));
 
     // If on device, copy to host
@@ -179,9 +179,9 @@ bool DenseMatrix<T>::toOrdering(ORDERING newOrdering) {
     return true;
 }
 
-template <typename T>
-bool DenseMatrix<T>::save2File(std::string filePath) {
-    using mt = Matrix::metadataType;
+template <typename DT, typename MT>
+bool DenseMatrix<DT, MT>::save2File(std::string filePath) {
+    using mt = MT;
     assert(!this->onDevice);
     assert(this->ordering == ORDERING::ROW_MAJOR);
 
@@ -202,11 +202,11 @@ bool DenseMatrix<T>::save2File(std::string filePath) {
     return true;
 }
 
-template <typename T>
-bool DenseMatrix<T>::allocateSpace(bool onDevice) {
+template <typename DT, typename MT>
+bool DenseMatrix<DT, MT>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
 
-    size_t totalSize = this->numRows * this->numCols * sizeof(T);
+    size_t totalSize = this->numRows * this->numCols * sizeof(DT);
     if (onDevice) {
         cudaCheckError(cudaMalloc(
             &this->data, totalSize));
@@ -221,8 +221,8 @@ bool DenseMatrix<T>::allocateSpace(bool onDevice) {
     return true;
 }
 
-template <typename T>
-bool DenseMatrix<T>::freeSpace() {
+template <typename DT, typename MT>
+bool DenseMatrix<DT, MT>::freeSpace() {
     if (this->onDevice) {
         cudaCheckError(cudaFree(this->data));
     } else {
@@ -232,6 +232,6 @@ bool DenseMatrix<T>::freeSpace() {
     return true;
 }
 
-template class DenseMatrix<float>;
-template class DenseMatrix<double>;
+template class DenseMatrix<float, uint32_t>;
+template class DenseMatrix<double, uint32_t>;
 }

@@ -1,13 +1,14 @@
-#include "spmm_bsr.hpp"
+#include "formats/sparse_bsr.hpp"
 #include "commons.hpp"
+#include <cstdint>
 
 namespace cuspmm {
 
-template <typename T, typename AccT>
-DenseMatrix<T> *spmmBsrCpu(SparseMatrixBSR<T> *ma, DenseMatrix<T> *mb) {
-    using mt = Matrix::metadataType;
+template <typename DT, typename MT, typename AccT>
+DenseMatrix<DT, MT> *spmmBSRCpu(SparseMatrixBSR<DT, MT> *ma, DenseMatrix<DT, MT> *mb) {
+    using mt = MT;
 
-    DenseMatrix<T> *mc = new DenseMatrix<T>(ma->numRows, mb->numCols, false);
+    DenseMatrix<DT, MT> *mc = new DenseMatrix<DT, MT>(ma->numRows, mb->numCols, false);
 
     if (ma->onDevice || mb->onDevice) {
         std::cerr << "Device incorrect!" << std::endl;
@@ -19,7 +20,7 @@ DenseMatrix<T> *spmmBsrCpu(SparseMatrixBSR<T> *ma, DenseMatrix<T> *mb) {
         mt blockRowEnd = ma->blockRowPtrs[blockRow + 1];
         for (mt blockIdx = blockRowStart; blockIdx < blockRowEnd; blockIdx++) {
             mt blockCol = ma->blockColIdxs[blockIdx];
-            T *blockData =
+            DT *blockData =
                 ma->data + (ma->blockRowSize * ma->blockColSize * blockIdx);
 
             const mt denseRowStart = blockRow * ma->blockRowSize;
@@ -41,7 +42,7 @@ DenseMatrix<T> *spmmBsrCpu(SparseMatrixBSR<T> *ma, DenseMatrix<T> *mb) {
     return mc;
 }
 
-template DenseMatrix<float> *
-spmmBsrCpu<float, double>(SparseMatrixBSR<float> *ma, DenseMatrix<float> *mb);
+template DenseMatrix<float, uint32_t> *
+spmmBSRCpu<float, uint32_t, double>(SparseMatrixBSR<float, uint32_t> *ma, DenseMatrix<float, uint32_t> *mb);
 
 } // namespace cuspmm
