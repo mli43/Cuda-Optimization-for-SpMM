@@ -30,7 +30,10 @@ public:
         auto ma = reinterpret_cast<MataT*>(_ma);
         auto mb = reinterpret_cast<MatbT*>(_mb);
         auto mc = reinterpret_cast<MatbT*>(_mc);
-        if (num == 0) {
+        if (num == -1) {
+            // Test all cuda kernels
+            return spmmBSRWrapper1<DT, MT, AccT>(ma, mb, mc);
+        } else if (num == 0) {
             return spmmBSRCpu<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 1) {
             return spmmBSRWrapper1<DT, MT, AccT>(ma, mb, mc);

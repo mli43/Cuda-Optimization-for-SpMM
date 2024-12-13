@@ -9,6 +9,10 @@ DenseMatrix<DT, MT>* spmmCOOCpu(SparseMatrixCOO<DT, MT>* ma, DenseMatrix<DT, MT>
 
     assert(!ma->onDevice && !mb->onDevice);
 
+    if (mb->ordering == ORDERING::COL_MAJOR) {
+        mb->toOrdering(ORDERING::ROW_MAJOR);
+    }
+
     for (mt idx = 0; idx < ma->numNonZero; idx++) {
         mt r = ma->rowIdxs[idx];
         mt c = ma->colIdxs[idx];

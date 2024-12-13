@@ -1,5 +1,6 @@
 #include "cuda_utils.hpp"
 #include "commons.hpp"
+#include "formats/matrix.hpp"
 #include "formats/sparse_csr.hpp"
 #include <cstdint>
 
@@ -33,6 +34,10 @@ __global__ void spmmCSRK1(MT aNumRows, MT aNumCols, MT aNumNonZero,
 template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
     size_t rows = a->numCols, cols = b->numCols;
+
+    if (b->ordering == ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::ROW_MAJOR);
+    }
 
     const size_t BLOCKSIZE = 32;
 

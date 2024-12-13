@@ -54,24 +54,19 @@ void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, f
     cpuResCpu->save2File(engine->fmt + "_cpu.res");
 
     // 2. Launch kernel
-    int numKernels = engine->numKernels;
-    for (int i = 1; i < numKernels; i++) {
-        // 2.1 timing kernel
-        auto kernel_start = std::chrono::high_resolution_clock::now();
-        auto kRes = reinterpret_cast<mb_t*>(engine->runKernel(i, da, db, dc));
-        auto kernel_end = std::chrono::high_resolution_clock::now();
-        auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - kernel_start);
+    auto kernel_start = std::chrono::high_resolution_clock::now();
+    auto kRes = reinterpret_cast<mb_t*>(engine->runKernel(-1, da, db, dc));
+    auto kernel_end = std::chrono::high_resolution_clock::now();
+    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - kernel_start);
 
-        auto kResCpu = kRes->copy2Host();
-        torch::Tensor kResTorch = toTorch<typename mb_t::DT, mb_t>(kResCpu);
+    auto kResCpu = kRes->copy2Host();
+    torch::Tensor kResTorch = toTorch<typename mb_t::DT, mb_t>(kResCpu);
 
-        // 2.2 check correctness
-        std::cout << "kernel " << i << " takes " << kernelTime.count() << "(us), allclose result: " <<
-            torch::allclose(cpuResTorch, kResTorch, rel_tol, abs_tol) << std::endl;
-        
-        // ! Don't delete kRes here! Since it uses dc's mem
-        delete kResCpu;
-    }
+    std::cout << "All kernels take " << kernelTime.count() << "(us), allclose result: " <<
+        torch::allclose(cpuResTorch, kResTorch, rel_tol, abs_tol) << std::endl;
+    
+    // ! Don't delete kRes here! Since it uses dc's mem
+    delete kResCpu;
 
     // Test cusparse
     if (engine->SUPPORT_CUSPARSE) {

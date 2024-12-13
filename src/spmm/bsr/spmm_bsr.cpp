@@ -8,9 +8,10 @@ template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT> *spmmBSRCpu(SparseMatrixBSR<DT, MT> *ma, DenseMatrix<DT, MT> *mb, DenseMatrix<DT, MT> *mc) {
     using mt = MT;
 
-    if (ma->onDevice || mb->onDevice) {
-        std::cerr << "Device incorrect!" << std::endl;
-        return nullptr;
+    assert(!ma->onDevice && !mb->onDevice);
+
+    if (mb->ordering == ORDERING::COL_MAJOR) {
+        mb->toOrdering(ORDERING::ROW_MAJOR);
     }
 
     for (mt blockRow = 0; blockRow < ma->numBlockRows; blockRow++) {

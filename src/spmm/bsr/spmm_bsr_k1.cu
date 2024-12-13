@@ -45,6 +45,10 @@ DenseMatrix<DT, MT>* spmmBSRWrapper1(SparseMatrixBSR<DT, MT>* a, DenseMatrix<DT,
     assert(a->onDevice && b->onDevice);
     size_t rows = a->numCols, cols = b->numCols;
 
+    if (b->ordering == ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::ROW_MAJOR);
+    }
+
     // (x, y)
     dim3 block(a->blockRowSize, a->blockColSize);
     dim3 grid(a->numBlockRows);

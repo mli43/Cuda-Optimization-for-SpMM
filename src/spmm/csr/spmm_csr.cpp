@@ -6,9 +6,10 @@ template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmCSRCpu(SparseMatrixCSR<DT, MT>* ma, DenseMatrix<DT, MT>* mb, DenseMatrix<DT, MT> *mc) {
     using mt = MT;
 
-    if (ma->onDevice || mb->onDevice) {
-        std::cerr << "Device incorrect!" << std::endl; 
-        return nullptr;
+    assert(!ma->onDevice && !mb->onDevice);
+
+    if (mb->ordering == ORDERING::COL_MAJOR) {
+        mb->toOrdering(ORDERING::ROW_MAJOR);
     }
 
     for (mt r = 0; r < ma->numRows; r++) {

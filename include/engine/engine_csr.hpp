@@ -14,6 +14,8 @@ DenseMatrix<DT, MT>* spmmCSRCpu(SparseMatrixCSR<DT, MT>* ma, DenseMatrix<DT, MT>
 template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c);
 
+template <typename DT, typename MT, typename AccT>
+DenseMatrix<DT, MT> *spmmCSRWrapper2(SparseMatrixCSR<DT, MT> *a, DenseMatrix<DT, MT> *b, DenseMatrix<DT, MT> *c);
 
 template<typename DT, typename MT, typename AccT>
 class EngineCSR : public EngineBase {
@@ -32,7 +34,11 @@ public:
         auto ma = reinterpret_cast<MataT*>(_ma);
         auto mb = reinterpret_cast<MatbT*>(_mb);
         auto mc = reinterpret_cast<MatbT*>(_mc);
-        if (num == 0) {
+        if (num == -1) {
+            // Test all cuda kernels
+            spmmCSRWrapper1<DT, MT, AccT>(ma, mb, mc);
+            return spmmCSRWrapper2<DT, MT, AccT>(ma, mb, mc);
+        } else if (num == 0) {
             return spmmCSRCpu<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 1) {
             return spmmCSRWrapper1<DT, MT, AccT>(ma, mb, mc);

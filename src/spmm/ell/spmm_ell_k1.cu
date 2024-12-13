@@ -35,6 +35,10 @@ template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmELLWrapper1(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
     const size_t numValues = a->numRows * a->maxRowNnz;
 
+    if (b->ordering == ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::ROW_MAJOR);
+    }
+
     const size_t BLOCKSIZE = 1024;
 
     dim3 block(BLOCKSIZE);
