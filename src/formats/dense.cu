@@ -1,4 +1,6 @@
 #include "formats/dense.hpp"
+#include "formats/matrix.hpp"
+#include <type_traits>
 
 namespace cuspmm {
 template <typename T>
@@ -56,6 +58,29 @@ DenseMatrix<T>::DenseMatrix(DenseMatrix<T>* source, bool onDevice) {
 template <typename T>
 DenseMatrix<T>::~DenseMatrix() {
     this->freeSpace();
+}
+
+template <typename T>
+void DenseMatrix<T>::setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP) {
+    cusparseOrder_t co;
+    if (this->ordering == ORDERING::ROW_MAJOR) {
+        co = CUSPARSE_ORDER_ROW;
+    } else {
+        co = CUSPARSE_ORDER_COL;
+    }
+    if constexpr (std::is_same<T, half>::value) {
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+                        this->data, CUDA_R_16F, co));
+    } 
+    if constexpr (std::is_same<T, float>::value) {
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+                        this->data, CUDA_R_32F, co));
+    }
+    if constexpr (std::is_same<T, double>::value) {
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+                        this->data, CUDA_R_64F, co));
+    } 
+    assertTypes3(T, half, float, double);
 }
 
 template <typename T>

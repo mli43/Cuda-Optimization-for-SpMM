@@ -1,6 +1,8 @@
 #include "cuda_utils.hpp"
 #include "spmm_coo.hpp"
 #include "torch/torch.h"
+#include "engine.hpp"
+#include "spmm_cusparse.hpp"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -76,6 +78,62 @@ DenseMatrix<T>* spmmCooDevice(SparseMatrixCOO<T>* a, DenseMatrix<T>* b) {
     return c;
 }
 
+/**
+ * @brief Cusparse spmm
+ * 
+ * @tparam T 
+ * @param a COO format, must be on device!
+ * @param b dense matrix b must COL_MAJOR and on device!
+ * @return DenseMatrix<T>* Will be row-major
+ */
+template <typename T>
+DenseMatrix<T>* spmmCOOCuSparse(SparseMatrixCOO<T>* a, DenseMatrix<T>* b) {
+    cusparseHandle_t handle;
+    cusparseSpMatDescr_t matA;
+    cusparseDnMatDescr_t matB, matC;
+
+    DenseMatrix<T>* c = new DenseMatrix<T>(a->numRows, b->numCols, true, ORDERING::ROW_MAJOR);
+
+    if (b->ordering != ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::COL_MAJOR);
+    }
+
+    auto t1 = std::chrono::high_resolution_clock::now();
+
+    CHECK_CUSPARSE(cusparseCreate(&handle));
+    // FIXME: Only supports float right not!
+    CHECK_CUSPARSE(cusparseCreateCoo(&matA, a->numRows, a->numCols, a->numNonZero, a->rowIdxs,a->colIdxs, a->data, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+    CHECK_CUSPARSE(cusparseCreateDnMat(&matB, b->numRows, b->numCols, b->numRows, b->data, CUDA_R_32F, CUSPARSE_ORDER_COL));
+    CHECK_CUSPARSE(cusparseCreateDnMat(&matC, a->numRows, b->numCols, b->numCols, c->data, CUDA_R_32F, CUSPARSE_ORDER_ROW));
+
+    float alpha = 1.0f, beta = 0.f;
+    void* dBuffer = nullptr;
+    size_t buffersize = 0;
+    CHECK_CUSPARSE(cusparseSpMM_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, matB, &beta, matC, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &buffersize));
+    cudaCheckError(cudaMalloc(&dBuffer, buffersize));
+    auto t2 = std::chrono::high_resolution_clock::now();
+    CHECK_CUSPARSE(cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, matB, &beta, matC, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, dBuffer));
+    cudaDeviceSynchronize();
+    auto t3 = std::chrono::high_resolution_clock::now();
+
+    CHECK_CUSPARSE(cusparseDestroySpMat(matA));
+    CHECK_CUSPARSE(cusparseDestroyDnMat(matB));
+    CHECK_CUSPARSE(cusparseDestroyDnMat(matC));
+    CHECK_CUSPARSE(cusparseDestroy(handle));
+    cudaCheckError(cudaFree(dBuffer));
+    auto t4 = std::chrono::high_resolution_clock::now();
+
+    auto prepTime = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
+    auto epilogueTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
+
+    std::cout << "cusparse prep time (us):" << prepTime.count() << ','
+              << "cusparse kernel time (us):" << kernelTime.count() << ','
+              << "cusparse epilogue time (us):" << epilogueTime.count() << std::endl;
+    
+    return c;
+}
+
 template <typename T>
 void runEngineCOO(SparseMatrixCOO<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -112,6 +170,14 @@ void runEngineCOO(SparseMatrixCOO<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
 
     cResCpu->save2File("coo_cuda.res");
     cResSeq->save2File("coo_cpu.res");
+
+    // cusparse test
+    DenseMatrix<T>* bColMj = new DenseMatrix<T>(b, false);
+    bColMj->toOrdering(ORDERING::COL_MAJOR);
+    auto dbColMj = bColMj->copy2Device();
+    auto cResCuSparse = cusparseTest<T>(da, dbColMj);
+    auto cResCuSparseCpu = cResCuSparse->copy2Host();
+    cResCuSparseCpu->save2File("coo_cusparse.res");
 
     auto denseA = a->toDense();
     auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);

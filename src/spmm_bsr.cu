@@ -2,6 +2,7 @@
 #include "torch/torch.h"
 #include "spmm_bsr.hpp"
 #include "commons.hpp"
+#include "engine.hpp"
 #include <cassert>
 #include <cstring>
 #include <iostream>

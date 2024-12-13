@@ -1,4 +1,4 @@
-#include "cusparse_v2.h"
+#include "cusparse.h"
 
 #define CHECK_CUSPARSE(func)                                                   \
 {                                                                              \

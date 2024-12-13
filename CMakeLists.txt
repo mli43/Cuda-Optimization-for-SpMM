@@ -23,7 +23,8 @@ file(GLOB_RECURSE SOURCES src/*.cu src/*.cpp)
 
 add_executable(cuspmm ${SOURCES})
 
-target_link_libraries(cuspmm "${TORCH_LIBRARIES}")
+target_link_libraries(cuspmm 
+    PUBLIC "${TORCH_LIBRARIES}" cudart cusparse)
 
 set_target_properties(cuspmm
     PROPERTIES CUDA_SEPARABLE_COMPILATION ON

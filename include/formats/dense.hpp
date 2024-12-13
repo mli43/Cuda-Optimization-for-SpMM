@@ -35,6 +35,8 @@ template <typename T> class DenseMatrix : public Matrix {
      */
     bool copyData(DenseMatrix<T>* source);
 
+    void setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP);
+
     void assertSameShape(DenseMatrix<T>* target);
 
     DenseMatrix<T>* copy2Device();

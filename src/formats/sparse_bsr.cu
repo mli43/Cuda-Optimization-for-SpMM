@@ -135,6 +135,30 @@ template <typename T> SparseMatrixBSR<T>::~SparseMatrixBSR() {
 }
 
 template <typename T>
+void SparseMatrixBSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+    cudaDataType dt;
+    if constexpr (std::is_same<T, half>::value) {
+        dt = CUDA_R_16F;
+    } else if constexpr (std::is_same<T, float>::value) {
+        dt = CUDA_R_32F;
+    } else if constexpr (std::is_same<T, double>::value) {
+        dt = CUDA_R_64F;
+    }
+    assertTypes3(T, half, float, double);
+
+    CHECK_CUSPARSE(cusparseCreateBsr(
+        matDescP, this->numBlockRows, (this->numCols / this->blockColSize),
+        this->numBlocks, this->blockRowSize, this->blockColSize,
+        this->blockRowPtrs, this->blockColIdxs, this->data, CUSPARSE_INDEX_32I,
+        CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, dt, CUSPARSE_ORDER_ROW));
+}
+
+template <typename T>
+cusparseSpMMAlg_t SparseMatrixBSR<T>::getCusparseAlg() {
+    return CUSPARSE_SPMM_ALG_DEFAULT;
+}
+
+template <typename T>
 bool SparseMatrixBSR<T>::copyData(SparseMatrixBSR<T> *source, bool onDevice) {
     this->assertSameShape(source);
     cudaMemcpyKind type;

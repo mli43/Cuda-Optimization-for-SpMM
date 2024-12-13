@@ -75,6 +75,29 @@ template <typename T> SparseMatrixCOO<T>::~SparseMatrixCOO() {
     }
 }
 
+template <typename T>
+void SparseMatrixCOO<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+    cudaDataType dt;
+    if constexpr (std::is_same<T, half>::value) {
+        dt = CUDA_R_16F;
+    } else if constexpr (std::is_same<T, float>::value) {
+        dt = CUDA_R_32F;
+    } else if constexpr (std::is_same<T, double>::value) {
+        dt = CUDA_R_64F;
+    }
+    assertTypes3(T, half, float, double);
+
+    CHECK_CUSPARSE(cusparseCreateCoo(
+        matDescP, this->numRows, this->numCols, this->numNonZero, this->rowIdxs,
+        this->colIdxs, this->data, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO,
+        dt));
+}
+
+template <typename T>
+cusparseSpMMAlg_t SparseMatrixCOO<T>::getCusparseAlg() {
+    return CUSPARSE_SPMM_COO_ALG4;
+}
+
 template <typename T> SparseMatrixCOO<T> *SparseMatrixCOO<T>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);

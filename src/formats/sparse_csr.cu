@@ -1,3 +1,4 @@
+#include "commons.hpp"
 #include "formats/sparse_csr.hpp"
 
 namespace cuspmm {
@@ -88,6 +89,24 @@ template <typename T> SparseMatrixCSR<T>::~SparseMatrixCSR() {
     }
 }
 
+template <typename T>
+void SparseMatrixCSR<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+    cudaDataType dt;
+    if constexpr (std::is_same<T, half>::value) {
+        dt = CUDA_R_16F;
+    } else if constexpr (std::is_same<T, float>::value) {
+        dt = CUDA_R_32F;
+    } else if constexpr (std::is_same<T, double>::value) {
+        dt = CUDA_R_64F;
+    }
+    assertTypes3(T, half, float, double);
+
+    CHECK_CUSPARSE(cusparseCreateCsr(matDescP, this->numRows, this->numCols, this->numNonZero, this->rowPtrs,
+                      this->colIdxs, this->data, CUSPARSE_INDEX_32I,
+                      CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, dt));
+}
+
+
 template <typename T> SparseMatrixCSR<T> *SparseMatrixCSR<T>::copy2Device() {
     assert(this->onDevice == false);
     assert(this->data != nullptr);
@@ -158,6 +177,11 @@ template <typename T> DenseMatrix<T> *SparseMatrixCSR<T>::toDense() {
         }
     }
     return dm;
+}
+
+template <typename T>
+cusparseSpMMAlg_t SparseMatrixCSR<T>::getCusparseAlg() {
+    return CUSPARSE_SPMM_CSR_ALG2;
 }
 
 template <typename T>

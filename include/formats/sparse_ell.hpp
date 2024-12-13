@@ -1,18 +1,10 @@
 #pragma once
 
+#include "commons.hpp"
+#include "cuda_utils.hpp"
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
-#include <cassert>
-#include <chrono>
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <unistd.h>
+#include "spmm_cusparse.hpp"
 
 namespace cuspmm{
 
@@ -30,6 +22,9 @@ template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
                     bool onDevice);
 
     ~SparseMatrixELL();
+
+    void setCusparseSpMatDesc(cusparseSpMatDescr_t* matDescP) override;
+    cusparseSpMMAlg_t getCusparseAlg() override;
 
     bool allocateSpace(bool onDevice);
 

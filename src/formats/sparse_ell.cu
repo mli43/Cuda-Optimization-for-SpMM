@@ -89,6 +89,27 @@ template <typename T> SparseMatrixELL<T>::~SparseMatrixELL() {
     }
 }
 
+template <typename T>
+void SparseMatrixELL<T>::setCusparseSpMatDesc(cusparseSpMatDescr_t *matDescP) {
+    cudaDataType dt;
+    if constexpr (std::is_same<T, half>::value) {
+        dt = CUDA_R_16F;
+    } else if constexpr (std::is_same<T, float>::value) {
+        dt = CUDA_R_32F;
+    } else if constexpr (std::is_same<T, double>::value) {
+        dt = CUDA_R_64F;
+    }
+    assertTypes3(T, half, float, double);
+
+    // FIXME:
+    throw std::runtime_error("not implemented");
+}
+
+template <typename T>
+cusparseSpMMAlg_t SparseMatrixELL<T>::getCusparseAlg() {
+    return CUSPARSE_SPMM_ALG_DEFAULT;
+}
+
 template <typename T> bool SparseMatrixELL<T>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
     assert(this->colIdxs == nullptr);
