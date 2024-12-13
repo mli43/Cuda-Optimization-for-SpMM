@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
     auto *dense = new cuspmm::DenseMatrix<float, uint32_t>(dense_file);
 
     if (TEST_COO) {
-        std::cout << "###COO,testCase:" << input_dirname << '\n';
+        std::cout << "###\nCOO,testCase:" << input_dirname << '\n';
         auto* a = new cuspmm::SparseMatrixCOO<float, uint32_t>(coo_file);
         auto* engine = new cuspmm::EngineCOO<float, uint32_t, double>(input_dirname);
 
@@ -159,7 +159,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_CSR) {
-        std::cout << "###CSR,testCase:" << input_dirname << '\n';
+        std::cout << "###\nCSR,testCase:" << input_dirname << '\n';
         auto* a = new cuspmm::SparseMatrixCSR<float, uint32_t>(csr_file);
         auto* engine = new cuspmm::EngineCSR<float, uint32_t, double>(input_dirname);
 
@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_BSR) {
-        std::cout << "###BSR,testCase:" << input_dirname << '\n';
+        std::cout << "###\nBSR,testCase:" << input_dirname << '\n';
         auto* a = new cuspmm::SparseMatrixBSR<float, uint32_t>(bsr_file);
         auto* engine = new cuspmm::EngineBSR<float, uint32_t, double>(input_dirname);
 
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_ELL) {
-        std::cout << "###ELL,testCase:" << input_dirname << '\n';
+        std::cout << "###\nELL,testCase:" << input_dirname << '\n';
         auto* a = new cuspmm::SparseMatrixELL<float, uint32_t>(ell_colind_file, ell_values_file);
         auto* engine = new cuspmm::EngineELL<float, uint32_t, double>(input_dirname);
 

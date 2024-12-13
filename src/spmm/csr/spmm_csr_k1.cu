@@ -31,7 +31,7 @@ __global__ void spmmCSRK1(MT aNumRows, MT aNumCols, MT aNumNonZero,
 }
 
 template <typename DT, typename MT, typename AccT>
-DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT, MT>* b) {
+DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
     size_t rows = a->numCols, cols = b->numCols;
 
     const size_t BLOCKSIZE = 32;
@@ -41,8 +41,7 @@ DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT,
 
     assert(a->onDevice && b->onDevice);
 
-    DenseMatrix<DT, MT>* c = new DenseMatrix<DT, MT>(a->numRows, b->numCols, true);
-
+    auto t1 = std::chrono::high_resolution_clock::now();
     spmmCSRK1<DT, MT, AccT><<<grid, block>>>(
         a->numRows, a->numCols, a->numNonZero, a->rowPtrs, a->colIdxs, a->data,
         b->numRows, b->numCols, b->data, 
@@ -50,9 +49,13 @@ DenseMatrix<DT, MT>* spmmCSRWrapper1(SparseMatrixCSR<DT, MT>* a, DenseMatrix<DT,
     );
     cudaDeviceSynchronize();
 
+    auto t2 = std::chrono::high_resolution_clock::now();
+    printf("%s with shape block(z=%d,y=%d,x=%d) grid(z=%d,y=%d,x=%d): %ld ns\n", __func__,
+            block.z, block.y, block.x, grid.z, grid.y, grid.x, std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count());
+    
     return c;
 }
 
-template DenseMatrix<float, uint32_t>* spmmCSRWrapper1<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b);
+template DenseMatrix<float, uint32_t>* spmmCSRWrapper1<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
 
 } // namespace cuspmm

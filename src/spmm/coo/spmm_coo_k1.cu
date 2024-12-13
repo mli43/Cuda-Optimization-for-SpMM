@@ -48,7 +48,7 @@ __global__ void spmmCOOK2(MT aNumRows, MT aNumCols, MT aNumNonZero,
 }
 
 template <typename DT, typename MT, typename AccT>
-DenseMatrix<DT, MT>* spmmCOOWrapper1(SparseMatrixCOO<DT, MT>* a, DenseMatrix<DT, MT>* b) {
+DenseMatrix<DT, MT>* spmmCOOWrapper1(SparseMatrixCOO<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
     const size_t numNonZero = a->numNonZero;
 
     const size_t BLOCKSIZE = 1024;
@@ -58,8 +58,7 @@ DenseMatrix<DT, MT>* spmmCOOWrapper1(SparseMatrixCOO<DT, MT>* a, DenseMatrix<DT,
 
     assert(a->onDevice && b->onDevice);
 
-    DenseMatrix<DT, MT>* c = new DenseMatrix<DT, MT>(a->numRows, b->numCols, true);
-
+    auto t1 = std::chrono::high_resolution_clock::now();
     spmmCOOK1<DT, MT, AccT><<<grid, block>>>(
         a->numRows, a->numCols, a->numNonZero, a->rowIdxs, a->colIdxs, a->data,
         b->numRows, b->numCols, b->data, 
@@ -67,10 +66,14 @@ DenseMatrix<DT, MT>* spmmCOOWrapper1(SparseMatrixCOO<DT, MT>* a, DenseMatrix<DT,
     );
     cudaDeviceSynchronize();
 
+    auto t2 = std::chrono::high_resolution_clock::now();
+    printf("%s with shape block(z=%d,y=%d,x=%d) grid(z=%d,y=%d,x=%d): %ld ns\n", __func__,
+            block.z, block.y, block.x, grid.z, grid.y, grid.x, std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count());
+    
     return c;
 }
 
 // Instantiation
-template DenseMatrix<float, uint32_t>* spmmCOOWrapper1<float, uint32_t, double>(SparseMatrixCOO<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b);
+template DenseMatrix<float, uint32_t>* spmmCOOWrapper1<float, uint32_t, double>(SparseMatrixCOO<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
 
 } // namespace cuspmm

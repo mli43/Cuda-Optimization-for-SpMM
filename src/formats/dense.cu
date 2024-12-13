@@ -1,6 +1,7 @@
 #include "commons.hpp"
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
+#include <cstring>
 
 namespace cuspmm {
 template <typename DT, typename MT>
@@ -140,25 +141,29 @@ bool DenseMatrix<DT, MT>::toOrdering(ORDERING newOrdering) {
     // Malloc new space
     size_t totalSize = this->numRows * this->numCols * sizeof(DT);
     DT* newData;
+    DT* tmpData;
     cudaCheckError(cudaMallocHost(&newData, totalSize));
+    cudaCheckError(cudaMallocHost(&tmpData, totalSize));
 
     // If on device, copy to host
     if (this->onDevice) {
-        cudaCheckError(cudaMemcpy(newData, this->data, totalSize, cudaMemcpyDeviceToHost));
+        cudaCheckError(cudaMemcpy(tmpData, this->data, totalSize, cudaMemcpyDeviceToHost));
+    } else {
+        memcpy(tmpData, this->data, totalSize);
     }
 
     if (this->ordering == ORDERING::ROW_MAJOR && newOrdering == ORDERING::COL_MAJOR) {
         // Reorganize
         for (int r = 0; r < this->numRows; r++) {
             for (int c = 0; c < this->numCols; c++) {
-                newData[ColMjIdx(r, c, this->numRows)] = this->data[RowMjIdx(r, c, this->numCols)];
+                newData[ColMjIdx(r, c, this->numRows)] = tmpData[RowMjIdx(r, c, this->numCols)];
             }
         }
     } else if (this->ordering == ORDERING::COL_MAJOR && newOrdering == ORDERING::ROW_MAJOR) {
         // Reorganize
         for (int r = 0; r < this->numRows; r++) {
             for (int c = 0; c < this->numCols; c++) {
-                newData[RowMjIdx(r, c, this->numCols)] = this->data[ColMjIdx(r, c, this->numRows)];
+                newData[RowMjIdx(r, c, this->numCols)] = tmpData[ColMjIdx(r, c, this->numRows)];
             }
         }
     } else {
@@ -167,13 +172,15 @@ bool DenseMatrix<DT, MT>::toOrdering(ORDERING newOrdering) {
     }
 
     this->freeSpace();
-    this->allocateSpace(this->onDevice);
     if (this->onDevice) {
+        this->allocateSpace(this->onDevice);
         cudaCheckError(cudaMemcpy(this->data, newData, totalSize, cudaMemcpyHostToDevice));
+        cudaFreeHost(newData);
     } else {
         this->data = newData;
     }
 
+    cudaFreeHost(tmpData);
     this->ordering = newOrdering;
 
     return true;

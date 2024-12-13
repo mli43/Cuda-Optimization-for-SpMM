@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <cstdint>
+#include <cstdio>
 
 #include "utils.hpp"
 
