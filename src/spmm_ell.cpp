@@ -20,9 +20,13 @@ DenseMatrix<T>* spmmEllCpu(SparseMatrixELL<T>* ma, DenseMatrix<T>* mb) {
             T value = ma->data[col * ma->maxColNnz + rowind];
 
             if (row>= 0) {
-            //printf("row %d, col %d, value %f\n", row, col, value);
                 for (mt j = 0; j < mb->numCols; j++){
+                    if (mb->ordering == ORDERING::ROW_MAJOR) {
                     mc->data[row * mc->numCols + j] += value * mb->data[col * mb->numCols + j];
+                    }
+                    else {
+                    mc->data[row * mc->numCols + j] += value * mb->data[j * mb->numRows + col];
+                    }
                 }
             }
         }

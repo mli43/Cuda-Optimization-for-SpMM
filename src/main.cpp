@@ -3,6 +3,7 @@
 #include "spmm_csr.hpp"
 #include "spmm_bsr.hpp"
 #include "spmm_ell.hpp"
+#include "formats/matrix.hpp"
 #include "utils.hpp"
 #include "getopt.h"
 #include <algorithm>
@@ -206,14 +207,20 @@ int main(int argc, char *argv[]) {
     }
 
     if (TEST_ELL) {
-        std::cout << "###ELL,testCase:" << input_dirname << ',';
         cuspmm::SparseMatrixELL<float> *a =
             new cuspmm::SparseMatrixELL<float>(ell_rowind_file, ell_values_file_colmajor);
 
         float abs_tol = 1.0e-3f;
         double rel_tol = 1.0e-2f;
 
-        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol);
+        std::cout << "###format:ELL,testCase:" << input_dirname << ',';
+        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol, cuspmm::ORDERING::ROW_MAJOR, 0);
+        std::cout << "###format:ELL,testCase:" << input_dirname << ',';
+        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol, cuspmm::ORDERING::ROW_MAJOR, 1);
+        std::cout << "###format:ELL,testCase:" << input_dirname << ',';
+        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol, cuspmm::ORDERING::COL_MAJOR, 0);
+        std::cout << "###format:ELL,testCase:" << input_dirname << ',';
+        cuspmm::runEngineELL<float>(a, dense, abs_tol, rel_tol, cuspmm::ORDERING::COL_MAJOR, 1);
     }
 
     return 0;

@@ -15,7 +15,7 @@ namespace cuspmm {
 template <typename T, typename MT, typename AccT>
 __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNnz,
                                     MT *rowIdxs, T* aData, 
-                                    MT bNumRows, MT bNumCols, T* bData,
+                                    MT bNumRows, MT bNumCols, T* bData, ORDERING bOrder,
                                     T* cData) {
     // A -> sparse matrix -> R x C
     // B -> dense matrix -> C x N
@@ -33,7 +33,13 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNn
 
         if (row>= 0) {
             for (int j = 0; j < bNumCols; j++) {
+                if (bOrder == ORDERING::ROW_MAJOR) {
                 atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]); 
+                }
+                else {
+                atomicAdd(&cData[row * bNumCols + j], value * bData[j * bNumRows + col]); 
+                }
+
             }
         }
     }
@@ -42,7 +48,7 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNn
 template <typename T, typename MT, typename AccT>
 __global__ void spmmELLK2(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNnz,
                                     MT *rowIdxs, T* aData, 
-                                    MT bNumRows, MT bNumCols, T* bData,
+                                    MT bNumRows, MT bNumCols, T* bData, ORDERING bOrder,
                                     T* cData) {
     // A -> sparse matrix -> R x C
     // B -> dense matrix -> C x N
@@ -68,7 +74,13 @@ __global__ void spmmELLK2(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNn
     for (int j = 0; j < bNumCols; j++) {
         for (int startRow = 0; startRow < bNumRows; startRow += blockDim.x) {
             if (startRow + threadIdx.x < bNumRows) {
+                if (bOrder == ORDERING::ROW_MAJOR) {
                 bCol[threadIdx.x] = bData[(startRow + threadIdx.x)* bNumCols + j];
+                }
+                else {
+                bCol[threadIdx.x] = bData[j * bNumRows + (startRow + threadIdx.x)];
+                }
+
             }
             else {
                 bCol[threadIdx.x] = 0;
@@ -86,7 +98,7 @@ __global__ void spmmELLK2(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNn
 }
 
 template <typename T, typename AccT>
-DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
+DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b, int kernelType) {
     const size_t numValues = a->numCols * a->maxColNnz;
 
     dim3 block(BLOCKSIZE);
@@ -99,17 +111,39 @@ DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
 
     DenseMatrix<T>* c = new DenseMatrix<T>(a->numRows, b->numCols, true);
 
+    if (kernelType) {
     spmmELLK2<T, typename SparseMatrixELL<T>::metadataType, AccT><<<grid, block>>>(
         a->numRows, a->numCols, a->numNonZero, a->maxColNnz, a->rowIdxs, a->data,
-        b->numRows, b->numCols, b->data, 
+        b->numRows, b->numCols, b->data, b->ordering,
         c->data
     );
+    std::cout << "kernelType: 2,";
+    } 
+    else {
+    spmmELLK1<T, typename SparseMatrixELL<T>::metadataType, AccT><<<grid, block>>>(
+        a->numRows, a->numCols, a->numNonZero, a->maxColNnz, a->rowIdxs, a->data,
+        b->numRows, b->numCols, b->data, b->ordering,
+        c->data
+    );
+    std::cout << "kernelType: 1,";
+    }
 
     return c;
 }
 
 template <typename T>
-void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol) {
+void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, double rel_tol, ORDERING order, int kernelType) {
+    b->toOrdering(order);
+
+    if (b->ordering == ORDERING::ROW_MAJOR) {
+        std::cout << "denseOrdering::ROW_MAJOR,";
+    }
+    else {
+        std::cout << "denseOrdering::COL_MAJOR,";
+    }
+
+    printf("sparsity:%.2f,", 1.0 * a->numNonZero / (a->numRows * a->numCols));
+
     auto start = std::chrono::high_resolution_clock::now();
 
     // 1. Move to device
@@ -119,7 +153,7 @@ void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     auto copy_to_device_end = std::chrono::high_resolution_clock::now();
 
     // 2. Launch kernel
-    auto cRes = spmmEllDevice<T, double>(da, db);
+    auto cRes = spmmEllDevice<T, double>(da, db, kernelType);
     cudaDeviceSynchronize();
     auto kernel_end = std::chrono::high_resolution_clock::now();
 
@@ -138,28 +172,29 @@ void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     auto parallelTime = std::chrono::duration_cast<std::chrono::microseconds>(copy_to_host_end - start);
     auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seq_end - copy_to_host_end);
 
-    std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << ','
-              << "kernelTime (us):" << kernelTime.count() << ','
-              << "copy2HostTime (us):" << copy2HostTime.count() << ','
-              << "parallelTime (us):" << parallelTime.count() << ','
-              << "seqTime (us):" << seqTime.count() << '\n';
+    std::cout << "cudaPrologTimeUs:" << copy2DeviceTime.count() << ','
+              << "cudaKernelTimeUs:" << kernelTime.count() << ','
+              << "cudaEpilogTimeUs:" << copy2HostTime.count() << ','
+              << "cudaTotalTimeUs:" << parallelTime.count() << ','
+              << "sequentialTimeUs:" << seqTime.count() << ',';
 
     cResCpu->save2File("ell_cuda.res");
     cResSeq->save2File("ell_cpu.res");
 
+    b->toOrdering(ORDERING::ROW_MAJOR);
     auto denseA = a->toDense();
     auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
     torch::Tensor taDevice = torch::from_blob(denseA->data, {denseA->numRows, denseA->numCols}, options).clone().cuda();
     torch::Tensor tbDevice = torch::from_blob(b->data, {b->numRows, b->numCols}, options).clone().cuda();
     torch::Tensor tcCpu = torch::from_blob(cResCpu->data, {cResCpu->numRows, cResCpu->numCols}, options).clone();
     torch::Tensor cResTorch = torch::matmul(taDevice, tbDevice).cpu();
-    std::cout << "ell allclose: " << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
+    std::cout << "allclose:" << torch::allclose(tcCpu, cResTorch, rel_tol, abs_tol) << std::endl;
 
     auto denseTorch = new DenseMatrix<T>(cResCpu->numRows, cResCpu->numCols, false);
     std::memcpy(denseTorch->data, cResTorch.data_ptr<float>(), denseTorch->numRows * denseTorch->numCols * sizeof(float));
     denseTorch->save2File("ell_torch.res");
 }
 
-template void runEngineELL<float>(SparseMatrixELL<float> *a, DenseMatrix<float>* b, float abs_tol, double rel_tol);
+template void runEngineELL<float>(SparseMatrixELL<float> *a, DenseMatrix<float>* b, float abs_tol, double rel_tol, ORDERING order, int kernelType);
 
 } // namespace cuspmm
