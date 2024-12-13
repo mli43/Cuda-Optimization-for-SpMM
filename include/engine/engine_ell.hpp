@@ -15,6 +15,9 @@ DenseMatrix<DT, MT>* spmmELLCpu(SparseMatrixELL<DT, MT>* ma, DenseMatrix<DT, MT>
 template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmELLWrapper1(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c);
 
+template <typename DT, typename MT, typename AccT>
+DenseMatrix<DT, MT>* spmmELLWrapper2(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c);
+
 template<typename DT, typename MT, typename AccT>
 class EngineELL : public EngineBase {
 public:
@@ -34,11 +37,14 @@ public:
         auto mc = reinterpret_cast<MatbT*>(_mc);
         if (num == -1) {
             // Test all cuda kernels
-            return spmmELLWrapper1<DT, MT, AccT>(ma, mb, mc);
+            // return spmmELLWrapper1<DT, MT, AccT>(ma, mb, mc);
+            return spmmELLWrapper2<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 0) {
             return spmmELLCpu<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 1) {
             return spmmELLWrapper1<DT, MT, AccT>(ma, mb, mc);
+        } else if (num == 2) {
+            return spmmELLWrapper2<DT, MT, AccT>(ma, mb, mc);
         }
 
         throw std::runtime_error("Not implemented");

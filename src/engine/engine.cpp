@@ -60,6 +60,7 @@ void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, f
     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - kernel_start);
 
     auto kResCpu = kRes->copy2Host();
+    kResCpu->save2File(engine->fmt + "_cuda.res");
     torch::Tensor kResTorch = toTorch<typename mb_t::DT, mb_t>(kResCpu);
 
     std::cout << "All kernels take " << kernelTime.count() << "(us), allclose result: " <<

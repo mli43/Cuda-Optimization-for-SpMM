@@ -13,15 +13,15 @@ class SparseMatrixELL: public SparseMatrix<_dataT, _metaT> {
   public:
     using DT = _dataT;
     using MT = _metaT;
-    MT *colIdxs;
-    MT maxRowNnz;
+    MT *rowIdxs;
+    MT maxColNnz;
 
     SparseMatrixELL();
 
     SparseMatrixELL(std::string colindPath, std::string valuesPath);
 
     SparseMatrixELL(MT numRows, MT numCols,
-                    MT numNonZero, MT maxRowNnz, 
+                    MT numNonZero, MT maxColNnz, 
                     bool onDevice);
 
     ~SparseMatrixELL();

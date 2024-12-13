@@ -3,27 +3,28 @@
 #include "formats/sparse_ell.hpp"
 #include <cstdint>
 
+#define BLOCKSIZE 1024
+
 namespace cuspmm {
 
-template <typename DT, typename MT, typename AccT>
-__global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNnz,
-                                    MT *colIdxs, DT* aData, 
-                                    MT bNumRows, MT bNumCols, DT* bData,
-                                    DT* cData) {
+template <typename T, typename MT, typename AccT>
+__global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNnz,
+                                    MT *rowIdxs, T* aData, 
+                                    MT bNumRows, MT bNumCols, T* bData,
+                                    T* cData) {
     // A -> sparse matrix -> R x C
     // B -> dense matrix -> C x N
     // C -> dense matrix -> C = A @ B -> R x N
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    size_t numValues = aNumRows * aMaxRowNnz;
+    size_t numValues = aNumCols * aMaxColNnz;
 
     if (idx < numValues) {
-        int row = idx / aMaxRowNnz;
-        int col = colIdxs[idx];
+        int col = idx / aMaxColNnz;
+        int row = rowIdxs[idx];
         float value = aData[idx];
-        
 
-        if (col >= 0) {
+        if (row>= 0) {
             for (int j = 0; j < bNumCols; j++) {
                 atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]); 
             }
@@ -33,22 +34,21 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNn
 
 template <typename DT, typename MT, typename AccT>
 DenseMatrix<DT, MT>* spmmELLWrapper1(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
-    const size_t numValues = a->numRows * a->maxRowNnz;
+    const size_t numValues = a->numRows * a->maxColNnz;
 
+    assert(a->onDevice && b->onDevice);
     if (b->ordering == ORDERING::COL_MAJOR) {
         b->toOrdering(ORDERING::ROW_MAJOR);
     }
 
-    const size_t BLOCKSIZE = 1024;
-
     dim3 block(BLOCKSIZE);
     dim3 grid((numValues + BLOCKSIZE - 1) / BLOCKSIZE);
 
-    assert(a->onDevice && b->onDevice);
 
     auto t1 = std::chrono::high_resolution_clock::now();
     spmmELLK1<DT, MT, AccT><<<grid, block>>>(
-        a->numRows, a->numCols, a->numNonZero, a->maxRowNnz, a->colIdxs, a->data,
+        a->numRows, a->numCols, a->numNonZero, a->maxColNnz, 
+        a->rowIdxs, a->data,
         b->numRows, b->numCols, b->data, 
         c->data
     );
