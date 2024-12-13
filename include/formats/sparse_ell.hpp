@@ -10,15 +10,15 @@ namespace cuspmm{
 
 template <typename T> class SparseMatrixELL: public SparseMatrix<T> {
   public:
-    Matrix::metadataType *colIdxs;
-    Matrix::metadataType maxRowNnz;
+    Matrix::metadataType *rowIdxs;
+    Matrix::metadataType maxColNnz;
 
     SparseMatrixELL();
 
     SparseMatrixELL(std::string colindPath, std::string valuesPath);
 
     SparseMatrixELL(Matrix::metadataType numRows, Matrix::metadataType numCols,
-                    Matrix::metadataType numNonZero, Matrix::metadataType maxRowNnz, 
+                    Matrix::metadataType numNonZero, Matrix::metadataType maxColNnz, 
                     bool onDevice);
 
     ~SparseMatrixELL();

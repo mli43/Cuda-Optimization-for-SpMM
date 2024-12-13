@@ -93,6 +93,7 @@ def process_mtx(directory):
                     # matrix_csc = mmread(mtx_file_path).tocsc()
                     matrix_coo = mmread(mtx_file_path).tocoo()
                     matrix_ell = mmread(mtx_file_path).tocsr()
+                    matrix_ell_col = mmread(mtx_file_path).tocsc()
                     matrix_bsr = matrix.tobsr()
                 except Exception as e:
                     print(f"Error reading or converting {mtx_file_path}: {e}")
@@ -106,6 +107,8 @@ def process_mtx(directory):
                 bsr_file_path = os.path.join(root, f"{base_name}.bsr")
                 ell_file_path_colind = os.path.join(root, f"{base_name}_colind.ell")
                 ell_file_path_values = os.path.join(root, f"{base_name}_values.ell")
+                ell_file_path_rowind = os.path.join(root, f"{base_name}_rowind.ell")
+                ell_file_path_values_colmajor = os.path.join(root, f"{base_name}_values_colmajor.ell")
                 
                 # Save the CSR matrix in the specified format
                 try:
@@ -176,9 +179,13 @@ def process_mtx(directory):
                 except Exception as e:
                     print(f"Error writing to {coo_file_path}: {e}")
 
-                try:
 
+                #########################
+                ### ELLPACK ROW MAJOR ###
+                #########################
+                try:
                     ### Now write ELLpack format
+
                     rows, cols = matrix_ell.shape
                     nnz = matrix_ell.nnz
 
@@ -219,6 +226,54 @@ def process_mtx(directory):
                 except Exception as e:
                     print(f"Error writing to {ell_file_path_value}: {e}")
                     
+
+                #########################
+                ### ELLPACK COL MAJOR ###
+                #########################
+                try:
+                    ### Now write ELLpack format
+
+                    rows, cols = matrix_ell_col.shape
+                    nnz = matrix_ell_col.nnz
+
+                    # now write the max num of non-zero in a col
+                    max_nnz = matrix_ell_col.getnnz(axis=1).max()
+
+                    rowind = [[-1 for _ in range(max_nnz)] for _ in range(cols)]
+                    values = [[0 for _ in range(max_nnz)] for _ in range(cols)]
+
+                    for col in range(cols):
+                        col_start = matrix_ell_col.indptr[col]
+                        col_end = matrix_ell_col.indptr[col+1]
+
+                        col_indices = matrix_ell_col.indices[col_start:col_end]
+                        col_values = matrix_ell_col.data[col_start:col_end]
+
+                        for i,row in enumerate(col_indices):
+                            rowind[col][i] = row
+                            values[col][i] = col_values[i]
+
+                    with open(ell_file_path_rowind, "w") as rowind_file:
+                        rowind_file.write(f"{rows} {cols} {nnz} {max_nnz}\n")
+
+                        for col in rowind:
+                            rowind_file.write(" ".join(map(str, col)) + "\n")
+
+                        print(f"Saved ELL rowind to {ell_file_path_rowind}")
+
+                except Exception as e:
+                    print(f"Error writing to {ell_file-path_rowin}: {e}")
+
+                try:
+
+                    with open(ell_file_path_values_colmajor, "w") as value_file:
+                        for col in values:
+                            value_file.write(" ".join(map(str, col)) + "\n")
+                        print(f"Saved ELL values to {ell_file_path_values_colmajor}")
+                except Exception as e:
+                    print(f"Error writing to {ell_file_path_values_colmajor}: {e}")
+
+
                 try:
                     save_bsr_matrix(matrix_bsr, bsr_file_path)
                         

@@ -8,11 +8,13 @@
 #include <iostream>
 #include <chrono>
 
+#define BLOCKSIZE 1024
+
 namespace cuspmm {
 
 template <typename T, typename MT, typename AccT>
-__global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNnz,
-                                    MT *colIdxs, T* aData, 
+__global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNnz,
+                                    MT *rowIdxs, T* aData, 
                                     MT bNumRows, MT bNumCols, T* bData,
                                     T* cData) {
     // A -> sparse matrix -> R x C
@@ -20,15 +22,16 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNn
     // C -> dense matrix -> C = A @ B -> R x N
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    size_t numValues = aNumRows * aMaxRowNnz;
+    size_t numValues = aNumCols * aMaxColNnz;
 
     if (idx < numValues) {
-        int row = idx / aMaxRowNnz;
-        int col = colIdxs[idx];
+        int col = idx / aMaxColNnz;
+        int row = rowIdxs[idx];
         float value = aData[idx];
+
         
 
-        if (col >= 0) {
+        if (row>= 0) {
             for (int j = 0; j < bNumCols; j++) {
                 atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]); 
             }
@@ -36,11 +39,55 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxRowNn
     }
 }
 
+template <typename T, typename MT, typename AccT>
+__global__ void spmmELLK2(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNnz,
+                                    MT *rowIdxs, T* aData, 
+                                    MT bNumRows, MT bNumCols, T* bData,
+                                    T* cData) {
+    // A -> sparse matrix -> R x C
+    // B -> dense matrix -> C x N
+    // C -> dense matrix -> C = A @ B -> R x N
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    __shared__ T bCol[BLOCKSIZE];
+
+    size_t numValues = aNumCols * aMaxColNnz;
+
+    int row, col;
+    float value;
+    row = -1;
+    col = 0;
+    value = 0;
+
+    if (idx < numValues) {
+        col = idx / aMaxColNnz;
+        row = rowIdxs[idx];
+        value = aData[idx];
+    }
+
+    for (int j = 0; j < bNumCols; j++) {
+        for (int startRow = 0; startRow < bNumRows; startRow += blockDim.x) {
+            if (startRow + threadIdx.x < bNumRows) {
+                bCol[threadIdx.x] = bData[(startRow + threadIdx.x)* bNumCols + j];
+            }
+            else {
+                bCol[threadIdx.x] = 0;
+            }
+            __syncthreads();
+
+            if (idx < numValues) {
+                if (row>= 0 && col - startRow >= 0 && col - startRow < blockDim.x) {
+                    atomicAdd(&cData[row * bNumCols + j], value * bCol[col - startRow]);
+                }
+            }
+            __syncthreads();
+        }
+    }
+}
+
 template <typename T, typename AccT>
 DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
-    const size_t numValues = a->numRows * a->maxRowNnz;
-
-    const size_t BLOCKSIZE = 1024;
+    const size_t numValues = a->numCols * a->maxColNnz;
 
     dim3 block(BLOCKSIZE);
     dim3 grid((numValues + BLOCKSIZE - 1) / BLOCKSIZE);
@@ -52,8 +99,8 @@ DenseMatrix<T>* spmmEllDevice(SparseMatrixELL<T>* a, DenseMatrix<T>* b) {
 
     DenseMatrix<T>* c = new DenseMatrix<T>(a->numRows, b->numCols, true);
 
-    spmmELLK1<T, typename SparseMatrixELL<T>::metadataType, AccT><<<grid, block>>>(
-        a->numRows, a->numCols, a->numNonZero, a->maxRowNnz, a->colIdxs, a->data,
+    spmmELLK2<T, typename SparseMatrixELL<T>::metadataType, AccT><<<grid, block>>>(
+        a->numRows, a->numCols, a->numNonZero, a->maxColNnz, a->rowIdxs, a->data,
         b->numRows, b->numCols, b->data, 
         c->data
     );
@@ -68,13 +115,16 @@ void runEngineELL(SparseMatrixELL<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     // 1. Move to device
     SparseMatrixELL<T>* da = a->copy2Device();
     DenseMatrix<T>* db = b->copy2Device();
+    cudaDeviceSynchronize();
     auto copy_to_device_end = std::chrono::high_resolution_clock::now();
 
     // 2. Launch kernel
     auto cRes = spmmEllDevice<T, double>(da, db);
+    cudaDeviceSynchronize();
     auto kernel_end = std::chrono::high_resolution_clock::now();
 
     auto cResCpu = cRes->copy2Host();
+    cudaDeviceSynchronize();
     auto copy_to_host_end = std::chrono::high_resolution_clock::now();
 
     // 3. Check result

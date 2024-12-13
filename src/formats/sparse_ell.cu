@@ -4,24 +4,22 @@ namespace cuspmm {
 
 template <typename T>
 SparseMatrixELL<T>::SparseMatrixELL() : SparseMatrix<T>() {
-    this->colIdxs = nullptr;
-    this->maxRowNnz = 0;
+    this->rowIdxs = nullptr;
+    this->maxColNnz = 0;
 }
 
 template <typename T>
-SparseMatrixELL<T>::SparseMatrixELL(std::string colindPath,
+SparseMatrixELL<T>::SparseMatrixELL(std::string rowindPath,
                                     std::string valuesPath) {
-    this->colIdxs = nullptr;
+    this->rowIdxs = nullptr;
     this->onDevice = false;
 
-    std::ifstream colindFile(colindPath);
-    std::string line_colind;
+    std::ifstream rowindFile(rowindPath);
 
     std::ifstream valuesFile(valuesPath);
-    std::string line_values;
 
-    if (!colindFile.is_open()) {
-        std::cerr << "File " << colindPath << "doesn't exist!" << std::endl;
+    if (!rowindFile.is_open()) {
+        std::cerr << "File " << rowindPath << "doesn't exist!" << std::endl;
         throw std::runtime_error(NULL);
     }
 
@@ -30,28 +28,28 @@ SparseMatrixELL<T>::SparseMatrixELL(std::string colindPath,
         throw std::runtime_error(NULL);
     }
 
-    colindFile >> this->numRows >> this->numCols >> this->numNonZero >>
-        this->maxRowNnz;
+    rowindFile >> this->numRows >> this->numCols >> this->numNonZero >>
+        this->maxColNnz;
     constexpr auto max_size = std::numeric_limits<std::streamsize>::max();
-    colindFile.ignore(max_size, '\n');
+    rowindFile.ignore(max_size, '\n');
 
     this->allocateSpace(false);
 
     // Read col indexes
-    for (size_t row = 0; row < this->numRows; row++) {
-        for (size_t i = 0; i < this->maxRowNnz; i++) {
-            colindFile >> this->colIdxs[row * this->maxRowNnz + i];
+    for (size_t col = 0; col < this->numCols; col++) {
+        for (size_t i = 0; i < this->maxColNnz; i++) {
+            rowindFile >> this->rowIdxs[col * this->maxColNnz + i];
         }
     }
 
     // Read values
-    for (size_t row = 0; row < this->numRows; row++) {
-        for (size_t i = 0; i < this->maxRowNnz; i++) {
-            valuesFile >> this->data[row * this->maxRowNnz + i];
+    for (size_t col = 0; col < this->numCols; col++) {
+        for (size_t i = 0; i < this->maxColNnz; i++) {
+            valuesFile >> this->data[col * this->maxColNnz + i];
         }
     }
 
-    colindFile.close();
+    rowindFile.close();
     valuesFile.close();
 }
 
@@ -59,24 +57,24 @@ template <typename T>
 SparseMatrixELL<T>::SparseMatrixELL(Matrix::metadataType numRows,
                                     Matrix::metadataType numCols,
                                     Matrix::metadataType numNonZero,
-                                    Matrix::metadataType maxRowNnz,
+                                    Matrix::metadataType maxColNnz,
                                     bool onDevice) {
     this->numRows = numRows;
     this->numCols = numCols;
     this->numNonZero = numNonZero;
     this->onDevice = onDevice;
-    this->maxRowNnz = maxRowNnz;
-    this->colIdxs = nullptr;
+    this->maxColNnz = maxColNnz;
+    this->rowIdxs = nullptr;
     this->data = nullptr;
     this->allocateSpace(onDevice);
 }
 
 template <typename T> SparseMatrixELL<T>::~SparseMatrixELL() {
-    if (this->colIdxs != nullptr) {
+    if (this->rowIdxs != nullptr) {
         if (this->onDevice) {
-            cudaCheckError(cudaFree(this->colIdxs));
+            cudaCheckError(cudaFree(this->rowIdxs));
         } else {
-            cudaCheckError(cudaFreeHost(this->colIdxs));
+            cudaCheckError(cudaFreeHost(this->rowIdxs));
         }
     }
 
@@ -112,28 +110,28 @@ cusparseSpMMAlg_t SparseMatrixELL<T>::getCusparseAlg() {
 
 template <typename T> bool SparseMatrixELL<T>::allocateSpace(bool onDevice) {
     assert(this->data == nullptr);
-    assert(this->colIdxs == nullptr);
+    assert(this->rowIdxs == nullptr);
     if (onDevice) {
 
         cudaCheckError(cudaMalloc(&this->data,
-                                  this->numRows * this->maxRowNnz * sizeof(T)));
+                                  this->numCols * this->maxColNnz * sizeof(T)));
         cudaCheckError(
-            cudaMalloc(&this->colIdxs, this->numRows * this->maxRowNnz *
+            cudaMalloc(&this->rowIdxs, this->numCols * this->maxColNnz *
                                            sizeof(Matrix::metadataType)));
         cudaCheckError(cudaMemset(this->data, 0,
-                                  this->numRows * this->maxRowNnz * sizeof(T)));
-        cudaCheckError(cudaMemset(this->colIdxs, 0,
-                                  this->numRows * this->maxRowNnz *
+                                  this->numCols * this->maxColNnz * sizeof(T)));
+        cudaCheckError(cudaMemset(this->rowIdxs, 0,
+                                  this->numCols * this->maxColNnz *
                                       sizeof(Matrix::metadataType)));
     } else {
         cudaCheckError(cudaMallocHost(
-            &this->data, this->numRows * this->maxRowNnz * sizeof(T)));
+            &this->data, this->numCols * this->maxColNnz * sizeof(T)));
         cudaCheckError(
-            cudaMallocHost(&this->colIdxs, this->numRows * this->maxRowNnz *
+            cudaMallocHost(&this->rowIdxs, this->numCols * this->maxColNnz *
                                                sizeof(Matrix::metadataType)));
-        std::memset(this->data, 0, this->numRows * this->maxRowNnz * sizeof(T));
-        std::memset(this->colIdxs, 0,
-                    this->numRows * this->maxRowNnz *
+        std::memset(this->data, 0, this->numCols * this->maxColNnz * sizeof(T));
+        std::memset(this->rowIdxs, 0,
+                    this->numCols * this->maxColNnz *
                         sizeof(Matrix::metadataType));
     }
 
@@ -145,14 +143,14 @@ template <typename T> SparseMatrixELL<T> *SparseMatrixELL<T>::copy2Device() {
     assert(this->data != nullptr);
 
     SparseMatrixELL<T> *newMatrix = new SparseMatrixELL<T>(
-        this->numRows, this->numCols, this->numNonZero, this->maxRowNnz, true);
+        this->numRows, this->numCols, this->numNonZero, this->maxColNnz, true);
 
-    cudaCheckError(cudaMemcpy(newMatrix->colIdxs, this->colIdxs,
-                              this->numRows * this->maxRowNnz *
+    cudaCheckError(cudaMemcpy(newMatrix->rowIdxs, this->rowIdxs,
+                              this->numCols* this->maxColNnz *
                                   sizeof(Matrix::metadataType),
                               cudaMemcpyHostToDevice));
     cudaCheckError(cudaMemcpy(newMatrix->data, this->data,
-                              this->numRows * this->maxRowNnz * sizeof(T),
+                              this->numCols * this->maxColNnz * sizeof(T),
                               cudaMemcpyHostToDevice));
 
     return newMatrix;
@@ -166,12 +164,12 @@ template <typename T> DenseMatrix<T> *SparseMatrixELL<T>::toDense() {
     DenseMatrix<T> *dm =
         new DenseMatrix<T>(this->numRows, this->numCols, false);
 
-    for (size_t row = 0; row < this->numRows; row++) {
-        size_t base = row * this->maxRowNnz;
-        for (size_t colind = 0; colind < this->maxRowNnz; colind++) {
-            int col = this->colIdxs[base + colind];
-            if (col >= 0) {
-                dm->data[row * dm->numCols + col] = this->data[base + colind];
+    for (size_t col = 0; col < this->numCols; col++) {
+        size_t base = col * this->maxColNnz;
+        for (size_t rowind = 0; rowind < this->maxColNnz; rowind++) {
+            int row = this->rowIdxs[base + rowind];
+            if (row >= 0) {
+                dm->data[row * dm->numCols + col] = this->data[base + rowind];
             }
         }
     }

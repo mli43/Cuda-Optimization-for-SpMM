@@ -85,8 +85,10 @@ int main(int argc, char *argv[]) {
     // Find files
     bool coo_found = false, csr_found = false, bsr_found = false, dense_found = false;
     bool ell_colind_found = false, ell_values_found = false;
+    bool ell_rowind_found = false, ell_values_found_colmajor = false;
     std::string coo_file, csr_file, bsr_file, dense_file;
     std::string ell_colind_file, ell_values_file;
+    std::string ell_rowind_file, ell_values_file_colmajor;
 
     for (const auto &entry :
          std::filesystem::directory_iterator(input_dirname)) {
@@ -96,27 +98,42 @@ int main(int argc, char *argv[]) {
             if (TEST_COO && endsWith(file_name, ".coo")) {
                 coo_file = entry.path().string();
                 coo_found = true;
-                std::cout << ".coo file is found: " << coo_file << "\n";
+                //std::cout << ".coo file is found: " << coo_file << "\n";
+
             } else if (TEST_CSR && endsWith(file_name, ".csr")) {
                 csr_file = entry.path().string();
                 csr_found = true;
-                std::cout << ".csr file is found: " << csr_file << "\n";
+                //std::cout << ".csr file is found: " << csr_file << "\n";
+
             } else if (TEST_BSR && endsWith(file_name, ".bsr")) {
                 bsr_file = entry.path().string();
                 bsr_found = true;
-                std::cout << ".bsr file is found: " << bsr_file << "\n";
+                //std::cout << ".bsr file is found: " << bsr_file << "\n";
+
             } else if (TEST_ELL && endsWith(file_name, "_colind.ell")) {
+                // row major ell files are found
                 ell_colind_file = entry.path().string();
                 ell_colind_found = true;
-                std::cout << "ell column index file is found: " << ell_colind_file << "\n";
+                //std::cout << "ell column index file is found: " << ell_colind_file << "\n";
             } else if (TEST_ELL && endsWith(file_name, "_values.ell")) {
                 ell_values_file = entry.path().string();
                 ell_values_found = true;
-                std::cout << "ell values file is found: " << ell_values_file << "\n";
+                //std::cout << "ell values file is found: " << ell_values_file << "\n";
+
+            } else if (TEST_ELL && endsWith(file_name, "_rowind.ell")) {
+                // col major ell files are found
+                ell_rowind_file = entry.path().string();
+                ell_rowind_found = true;
+                //std::cout << "ell row index file is found: " << ell_rowind_file << "\n";
+            } else if (TEST_ELL && endsWith(file_name, "_values_colmajor.ell")) {
+                ell_values_file_colmajor = entry.path().string();
+                ell_values_found_colmajor = true;
+                //std::cout << "ell col major values file is found: " << ell_values_file_colmajor << "\n";
+
             } else if (endsWith(file_name, "dense.in")) {
                 dense_file = entry.path().string();
                 dense_found = true;
-                std::cout << "dense file is found: " << dense_file << "\n";
+                //std::cout << "dense file is found: " << dense_file << "\n";
             }
         }
     }
@@ -137,6 +154,11 @@ int main(int argc, char *argv[]) {
     }
     if (TEST_ELL && (!ell_colind_found || !ell_values_found)) {
         std::cerr << "Error: Missing required files *_colind.ell and/or *_values.ell in " 
+                  << input_dirname << "\n";
+        exit(EXIT_FAILURE);
+    }
+    if (TEST_ELL && (!ell_rowind_found || !ell_values_found_colmajor)) {
+        std::cerr << "Error: Missing required files *_rowind.ell and/or *_values_colmajor.ell in " 
                   << input_dirname << "\n";
         exit(EXIT_FAILURE);
     }
@@ -186,7 +208,7 @@ int main(int argc, char *argv[]) {
     if (TEST_ELL) {
         std::cout << "###ELL,testCase:" << input_dirname << ',';
         cuspmm::SparseMatrixELL<float> *a =
-            new cuspmm::SparseMatrixELL<float>(ell_colind_file, ell_values_file);
+            new cuspmm::SparseMatrixELL<float>(ell_rowind_file, ell_values_file_colmajor);
 
         float abs_tol = 1.0e-3f;
         double rel_tol = 1.0e-2f;

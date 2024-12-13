@@ -141,13 +141,16 @@ void runEngineCOO(SparseMatrixCOO<T> *a, DenseMatrix<T>* b, float abs_tol, doubl
     // 1. Move to device
     SparseMatrixCOO<T>* da = a->copy2Device();
     DenseMatrix<T>* db = b->copy2Device();
+    cudaDeviceSynchronize();
     auto copy_to_device_end = std::chrono::high_resolution_clock::now();
 
     // 2. Launch kernel
     auto cRes = spmmCooDevice<T, double>(da, db);
+    cudaDeviceSynchronize();
     auto kernel_end = std::chrono::high_resolution_clock::now();
 
     auto cResCpu = cRes->copy2Host();
+    cudaDeviceSynchronize();
     auto copy_to_host_end = std::chrono::high_resolution_clock::now();
 
     // 3. Check result
