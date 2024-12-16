@@ -22,5 +22,8 @@ compile_commands.json
 
 local_test
 
+# python
+__pycache__
+
 id_ed25519
 .ipynb_checkpoints/

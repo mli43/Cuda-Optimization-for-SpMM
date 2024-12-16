@@ -30,6 +30,6 @@ DenseMatrix<DT, MT>* spmmELLCpu(SparseMatrixELL<DT, MT>* ma, DenseMatrix<DT, MT>
     return mc;
 };
 
-template DenseMatrix<float, uint32_t>* spmmELLCpu<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* ma, DenseMatrix<float, uint32_t>* mb, DenseMatrix<float, uint32_t>* mc);
+template __attribute__((used)) DenseMatrix<float, uint32_t>* spmmELLCpu<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* ma, DenseMatrix<float, uint32_t>* mb, DenseMatrix<float, uint32_t>* mc);
 
 }

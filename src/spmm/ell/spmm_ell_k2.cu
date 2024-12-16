@@ -62,8 +62,8 @@ DenseMatrix<DT, MT>* spmmELLWrapper2(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT,
 
     assert(a->onDevice && b->onDevice);
 
-    if (b->ordering == ORDERING::ROW_MAJOR) {
-        b->toOrdering(ORDERING::COL_MAJOR);
+    if (b->ordering == ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::ROW_MAJOR);
     }
 
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -82,5 +82,5 @@ DenseMatrix<DT, MT>* spmmELLWrapper2(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT,
     return c;
 }
 
-template DenseMatrix<float, uint32_t>* spmmELLWrapper2<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
+template DenseMatrix<float, uint32_t>* spmmELLWrapper2<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c) __attribute__((used));
 }

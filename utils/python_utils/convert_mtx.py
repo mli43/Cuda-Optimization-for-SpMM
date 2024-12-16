@@ -15,7 +15,19 @@ def save_bsr_matrix(matrix, filename, block_size=(4, 4)):
     if not isinstance(matrix, bsr_matrix):
         raise ValueError("Input matrix must be a bsr_matrix.")
     
-    matrix = matrix.tobsr(block_size, copy=True)
+    rows, cols = matrix.shape
+    size = block_size[0]
+    while rows % size != 0 and cols % size != 0:
+        size = size // 2
+    size= 1
+    print(f"bsr using shape {size},{size}")
+    try :
+        matrix = matrix.tobsr((size, size), copy=True)
+    except:
+        try:
+            matrix = matrix.tobsr((1, 1), copy=True)
+        except:
+            raise RuntimeError("wrong")
 
     # Extract BSR matrix data
     num_rows, num_cols = matrix.shape
@@ -43,7 +55,7 @@ def save_bsr_matrix(matrix, filename, block_size=(4, 4)):
 
         # Write the values of the blocks
         for block in data:
-            #print(block)
+            # print(block)
             file.write(" ".join(map(str, block.flatten())) + "\n")
 
         print(f"Saved BSR values to {filename}")
@@ -279,6 +291,8 @@ def process_mtx(directory):
                         
                 except Exception as e:
                     print(f"Error writing to {csr_file_path}: {e}")
+
+                print("finish all")
 
 
 if __name__ == "__main__":

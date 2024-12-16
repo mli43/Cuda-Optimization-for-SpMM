@@ -29,6 +29,6 @@ DenseMatrix<DT, MT>* spmmCSRCpu(SparseMatrixCSR<DT, MT>* ma, DenseMatrix<DT, MT>
     return mc;
 }
 
-template DenseMatrix<float, uint32_t>* spmmCSRCpu<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* ma, DenseMatrix<float, uint32_t>* mb, DenseMatrix<float, uint32_t>* mc);
+template __attribute__((used)) DenseMatrix<float, uint32_t>* spmmCSRCpu<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* ma, DenseMatrix<float, uint32_t>* mb, DenseMatrix<float, uint32_t>* mc);
 
 }

@@ -7,11 +7,11 @@
 namespace cuspmm {
 
 template <typename DT, typename MT, typename AccT>
-__global__ void spmmCSRK2(const MT aNumRows, const MT aNumCols,
+__global__ void spmmCSRK3(const MT aNumRows, const MT aNumCols,
                           const MT aNumNonZero, const MT *rowPtrs,
                           const MT *colIdxs, const DT *aData, const MT bNumRows,
                           const MT bNumCols, const DT *bData, DT *cData) {
-    // ! B must be col-major
+    // ! B is row-major
     const MT cr = blockDim.y * blockIdx.y + threadIdx.y;
     const MT cc = blockDim.x * blockIdx.x + threadIdx.x;
     const MT tid = blockDim.x * threadIdx.y + threadIdx.x;
@@ -28,7 +28,6 @@ __global__ void spmmCSRK2(const MT aNumRows, const MT aNumCols,
 
     AccT result = 0.f;
 
-    const DT *myBCol = bData + cc * bNumRows;
     const bool validCol = cc < bNumCols;
 
     MT offset, ac;
@@ -43,12 +42,11 @@ __global__ void spmmCSRK2(const MT aNumRows, const MT aNumCols,
             ac = 0;
             av = 0;
         }
-#pragma unroll
         for (int j = 0; j < WARPSIZE; ++j) {
             ac = __shfl_sync(0xFFFFFFFF, ac, nextLaneIdx);
             av = __shfl_sync(0xFFFFFFFF, av, nextLaneIdx);
             if (validCol) {
-                result += av * *(myBCol + ac);
+                result += av * bData[RowMjIdx(ac, cc, bNumCols)];
             }
         }
     }
@@ -58,13 +56,13 @@ __global__ void spmmCSRK2(const MT aNumRows, const MT aNumCols,
 }
 
 template <typename DT, typename MT, typename AccT>
-DenseMatrix<DT, MT> *spmmCSRWrapper2(SparseMatrixCSR<DT, MT> *a,
+DenseMatrix<DT, MT> *spmmCSRWrapper3(SparseMatrixCSR<DT, MT> *a,
                                      DenseMatrix<DT, MT> *b,
                                      DenseMatrix<DT, MT> *ref) {
-    if (b->ordering == ORDERING::ROW_MAJOR) {
-        b->toOrdering(ORDERING::COL_MAJOR);
+    if (b->ordering == ORDERING::COL_MAJOR) {
+        b->toOrdering(ORDERING::ROW_MAJOR);
     }
-    const int kernelNum = 2;
+    const int kernelNum = 3;
     assert(a->onDevice && b->onDevice);
 
     // 1. Prologue
@@ -79,7 +77,7 @@ DenseMatrix<DT, MT> *spmmCSRWrapper2(SparseMatrixCSR<DT, MT> *a,
 
     // 2. Kernel
     auto t2 = std::chrono::high_resolution_clock::now();
-    spmmCSRK2<DT, MT, AccT><<<grid, block>>>(
+    spmmCSRK3<DT, MT, AccT><<<grid, block>>>(
         a->numRows, a->numCols, a->numNonZero, a->rowPtrs, a->colIdxs,
         a->data, b->numRows, b->numCols, b->data, c->data);
     cudaDeviceSynchronize();
@@ -102,10 +100,10 @@ DenseMatrix<DT, MT> *spmmCSRWrapper2(SparseMatrixCSR<DT, MT> *a,
 
     reportTime(testcase, a->numRows, a->numCols, a->numNonZero, std::string("CSR"), 
         b->ordering, kernelNum, (double)(pro) / 1000, (double)(kernel) / 1000, (double)(epi) / 1000, correct);
-    
+
     return c;
 }
 
-template DenseMatrix<float, uint32_t>* spmmCSRWrapper2<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c) __attribute__((used));
+template DenseMatrix<float, uint32_t>* spmmCSRWrapper3<float, uint32_t, double>(SparseMatrixCSR<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c) __attribute__((used));
 
 } // namespace cuspmm

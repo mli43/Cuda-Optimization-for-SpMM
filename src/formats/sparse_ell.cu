@@ -161,8 +161,6 @@ template <typename DT, typename MT> SparseMatrixELL<DT, MT> *SparseMatrixELL<DT,
 template <typename DT, typename MT> DenseMatrix<DT, MT> *SparseMatrixELL<DT, MT>::toDense() {
     assert(!this->onDevice);
 
-    using mt = DT;
-
     DenseMatrix<DT, MT> *dm =
         new DenseMatrix<DT, MT>(this->numRows, this->numCols, false);
 

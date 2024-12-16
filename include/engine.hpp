@@ -10,6 +10,6 @@
 namespace cuspmm {
 
 template <typename EngT>
-void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, float abs_tol, float rel_tol);
+void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, float abs_tol, float rel_tol, bool skipSeq);
 
 }

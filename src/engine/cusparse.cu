@@ -7,14 +7,14 @@
 namespace cuspmm {
 
 template <typename DT, typename MT>
-DenseMatrix<DT, MT>* cusparseTest(SparseMatrix<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c) {
+DenseMatrix<DT, MT>* cusparseTest(SparseMatrix<DT, MT>* a, DenseMatrix<DT, MT>* b, DenseMatrix<DT, MT>* c, long& pro, long& kernel, long& epi) {
     cusparseHandle_t handle;
     cusparseSpMatDescr_t matA;
     cusparseDnMatDescr_t matB, matC;
 
-    if (b->ordering != ORDERING::COL_MAJOR) {
-        b->toOrdering(ORDERING::COL_MAJOR);
-    }
+    // if (b->ordering != ORDERING::COL_MAJOR) {
+    //     b->toOrdering(ORDERING::COL_MAJOR);
+    // }
 
     auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -45,16 +45,19 @@ DenseMatrix<DT, MT>* cusparseTest(SparseMatrix<DT, MT>* a, DenseMatrix<DT, MT>* 
     auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
     auto epilogueTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
 
-    std::cout << __func__ << ' '
-              << "cusparse prep time (us):" << prepTime.count() << ','
-              << "cusparse kernel time (us):" << kernelTime.count() << ','
-              << "cusparse epilogue time (us):" << epilogueTime.count() << std::endl;
+    // std::cout << __func__ << ' '
+    //           << "cusparse prep time (us):" << prepTime.count() << ','
+    //           << "cusparse kernel time (us):" << kernelTime.count() << ','
+    //           << "cusparse epilogue time (us):" << epilogueTime.count() << std::endl;
+    pro = prepTime.count();
+    kernel = kernelTime.count();
+    epi = epilogueTime.count();
     
     return c;
 }
 
-template DenseMatrix<float, uint32_t>* cusparseTest(SparseMatrix<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
-template DenseMatrix<double, uint32_t>* cusparseTest(SparseMatrix<double, uint32_t>* a, DenseMatrix<double, uint32_t>* b, DenseMatrix<double, uint32_t>* c);
+template DenseMatrix<float, uint32_t>* cusparseTest(SparseMatrix<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c, long& pro, long& kernel, long& epi);
+template DenseMatrix<double, uint32_t>* cusparseTest(SparseMatrix<double, uint32_t>* a, DenseMatrix<double, uint32_t>* b, DenseMatrix<double, uint32_t>* c, long& pro, long& kernel, long& epi);
 
 }
 

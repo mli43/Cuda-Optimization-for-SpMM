@@ -3,80 +3,56 @@
 #include "engine/cusparse.hpp"
 #include "engine/engine_bsr.hpp"
 #include "torch/torch.h"
+#include "utils.hpp"
 #include <ATen/ops/miopen_convolution_transpose_ops.h>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <torch/types.h>
 #include <type_traits>
 #include "engine.hpp"
 
 namespace cuspmm {
-template <typename DT, typename DenseMatT>
-inline torch::Tensor toTorch(DenseMatT* res) {
-    if constexpr (std::is_same_v<DT, half>) {
-        auto options = torch::TensorOptions().dtype(torch::kFloat16).requires_grad(false);
-        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
-    }
-    if constexpr (std::is_same_v<DT, float>) {
-        auto options = torch::TensorOptions().dtype(torch::kFloat32).requires_grad(false);
-        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
-    }
-    if constexpr (std::is_same_v<DT, double>) {
-        auto options = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(false);
-        return torch::from_blob(res->data, {res->numRows, res->numCols}, options).clone();
-    }
-}
-
 template <typename EngT>
-void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, float abs_tol, float rel_tol) {
+void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, float abs_tol, float rel_tol, bool skipSeq) {
     using ma_t = typename EngT::MataT;
     using mb_t = typename EngT::MatbT;
     mb_t* c = new mb_t(a->numRows, b->numCols, false, ORDERING::ROW_MAJOR);
-    auto t1 = std::chrono::high_resolution_clock::now();
 
     // 1. Move to device
     ma_t* da = a->copy2Device();
     mb_t* db = b->copy2Device();
     mb_t* dc = c->copy2Device();
-    auto t2 = std::chrono::high_resolution_clock::now();
-    auto copy2DeviceTime = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-    std::cout << "copy2DeviceTime (us):" << copy2DeviceTime.count() << "\n";
 
     // 2. Run CPU version
-    auto t3 = std::chrono::high_resolution_clock::now();
-    auto cpuResCpu = reinterpret_cast<mb_t*>(engine->runKernel(0, a, b, c));
-    auto t4 = std::chrono::high_resolution_clock::now();
-    auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3);
-    std::cout << "seqTime (us):" << seqTime.count() << "\n";
+    auto seqStart = std::chrono::high_resolution_clock::now();
+    auto cpuResCpu = c;
+    if (!skipSeq) {
+        cpuResCpu = reinterpret_cast<mb_t*>(engine->runKernel(0, a, b, c));
+    }
+    auto seqEnd = std::chrono::high_resolution_clock::now();
+    auto seqTime = std::chrono::duration_cast<std::chrono::microseconds>(seqEnd - seqStart);
 
-    // Create a torch version cpu result
-    torch::Tensor cpuResTorch = toTorch<typename mb_t::DT, mb_t>(cpuResCpu);
-    cpuResCpu->save2File(engine->fmt + "_cpu.res");
+    reportTime(testcase, a->numRows, a->numCols, a->numNonZero, engine->fmt, 
+    b->ordering, 0, 0, (double)seqTime.count() / 1000.f, 0, 1);
 
     // 2. Launch kernel
-    auto kernel_start = std::chrono::high_resolution_clock::now();
-    auto kRes = reinterpret_cast<mb_t*>(engine->runKernel(-1, da, db, dc));
-    auto kernel_end = std::chrono::high_resolution_clock::now();
-    auto kernelTime = std::chrono::duration_cast<std::chrono::microseconds>(kernel_end - kernel_start);
-
-    auto kResCpu = kRes->copy2Host();
-    kResCpu->save2File(engine->fmt + "_cuda.res");
-    torch::Tensor kResTorch = toTorch<typename mb_t::DT, mb_t>(kResCpu);
-
-    std::cout << "All kernels take " << kernelTime.count() << "(us), allclose result: " <<
-        torch::allclose(cpuResTorch, kResTorch, rel_tol, abs_tol) << std::endl;
-    
-    // ! Don't delete kRes here! Since it uses dc's mem
-    delete kResCpu;
+    int numK = engine->numKernels;
+    for (int i = 1; i <= numK; i++) {
+        auto kRes = reinterpret_cast<mb_t*>(engine->runKernel(i, da, db, cpuResCpu));
+        // ! Don't delete kRes here! Since it uses dc's mem
+    }
 
     // Test cusparse
     if (engine->SUPPORT_CUSPARSE) {
-        auto* _newB = new mb_t(b, false);
-        _newB->toOrdering(ORDERING::COL_MAJOR);
-        auto* newB = _newB->copy2Device();
-        cusparseTest<typename ma_t::DT, typename ma_t::MT>(reinterpret_cast<ma_t*>(da), reinterpret_cast<mb_t*>(newB), reinterpret_cast<mb_t*>(dc));
-        delete _newB;
-        delete newB;
+        long pro, kernel, epi;
+        cusparseTest<typename ma_t::DT, typename ma_t::MT>(reinterpret_cast<ma_t*>(da), reinterpret_cast<mb_t*>(db), reinterpret_cast<mb_t*>(dc), pro, kernel, epi);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        auto* tmp = dc->copy2Host();
+        auto t2 = std::chrono::high_resolution_clock::now();
+        epi += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        reportTime(testcase, a->numRows, a->numCols, a->numNonZero, engine->fmt, 
+        db->ordering, -1, (double)(pro) / 1000, (double)(kernel) / 1000, (double)(epi) / 1000, 1);
     }
 
     // Release memory
@@ -85,7 +61,7 @@ void runEngine(EngT* engine, typename EngT::MataT* a, typename EngT::MatbT* b, f
 }
 
 #define ENG_INST(fmt, dt, mt, acct) \
-template void runEngine<Engine##fmt<dt, mt, acct>>(Engine##fmt<dt, mt, acct>* engine, Engine##fmt<dt, mt, acct>::MataT* a, Engine##fmt<dt, mt, acct>::MatbT* b, float abs_tol, float rel_tol); \
+template void runEngine<Engine##fmt<dt, mt, acct>>(Engine##fmt<dt, mt, acct>* engine, Engine##fmt<dt, mt, acct>::MataT* a, Engine##fmt<dt, mt, acct>::MatbT* b, float abs_tol, float rel_tol, bool skipSeq); \
 
 // BSR
 ENG_INST(BSR, float, uint32_t, double);

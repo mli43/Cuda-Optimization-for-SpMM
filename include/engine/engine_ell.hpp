@@ -26,9 +26,37 @@ public:
 
     bool SUPPORT_CUSPARSE = false;
     std::string fmt;
+    std::string dirPath;
+    double seqTime = 1.f;
     EngineELL(std::string dirPath) {
-        this->numKernels = 2;
-        this->fmt = dirPath + "/ell";
+        this->numKernels = 1;
+        this->dirPath = dirPath;
+        this->fmt = "ELL";
+    }
+
+    void logSeq(double seq) {
+        this->seqTime = seq;
+    }
+
+    void report(MataT* a, MatbT* b, int num, double pro, double kernel, double epilog, bool correct) {
+        std::string ord;
+        if (b->ordering == ORDERING::ROW_MAJOR) {
+            ord = "ROW_MAJOR";
+        } else {
+            ord = "COL_MAJOR";
+        }
+        double total = pro + kernel + epilog;
+        std::cout << "{\n\"testcase\":\"" << this->dirPath << "\",\n" 
+                    << "\"sparsity\":\"" << ((double)a->numNonZero / (a->numRows * a->numCols)) << "\",\n"
+                    << "\"format\":\"" << this->fmt << "\",\n"
+                    << "\"kernelType\":\"" << num << "\",\n"
+                    << "\"denseOrdering\":\"" << ord << "\",\n"
+                    << "\"correct\":\"" << correct << "\",\n";
+        printf("\"cudaPrologTimeMs\":\"%lf\",\n"
+                "\"cudaKernelTimeMs\":\"%lf\",\n"
+                "\"cudaEpilogTimeMs\":\"%lf\",\n"
+                "\"cudaTotalTimeMs\":\"%lf\",\n"
+                "\"sequentialTimeMs\":\"%lf\"\n},\n", pro, kernel, epilog, total, this->seqTime);
     }
 
     void* runKernel(int num, void* _ma, void* _mb, void* _mc) {
@@ -36,9 +64,7 @@ public:
         auto mb = reinterpret_cast<MatbT*>(_mb);
         auto mc = reinterpret_cast<MatbT*>(_mc);
         if (num == -1) {
-            // Test all cuda kernels
-            // return spmmELLWrapper1<DT, MT, AccT>(ma, mb, mc);
-            return spmmELLWrapper2<DT, MT, AccT>(ma, mb, mc);
+            return spmmELLWrapper1<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 0) {
             return spmmELLCpu<DT, MT, AccT>(ma, mb, mc);
         } else if (num == 1) {

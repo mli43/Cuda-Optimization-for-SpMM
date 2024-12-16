@@ -1,4 +1,5 @@
 #include "commons.hpp"
+#include "cuda_utils.hpp"
 #include "formats/dense.hpp"
 #include "formats/matrix.hpp"
 #include <cstring>
@@ -64,21 +65,24 @@ DenseMatrix<DT, MT>::~DenseMatrix() {
 template <typename DT, typename MT>
 void DenseMatrix<DT, MT>::setCusparseDnMatDesc(cusparseDnMatDescr_t* matDescP) {
     cusparseOrder_t co;
+    int64_t ld;
     if (this->ordering == ORDERING::ROW_MAJOR) {
         co = CUSPARSE_ORDER_ROW;
+        ld = this->numCols;
     } else {
         co = CUSPARSE_ORDER_COL;
+        ld = this->numRows;
     }
     if constexpr (std::is_same<DT, half>::value) {
-        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, ld,
                         this->data, CUDA_R_16F, co));
     } 
     if constexpr (std::is_same<DT, float>::value) {
-        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, ld,
                         this->data, CUDA_R_32F, co));
     }
     if constexpr (std::is_same<DT, double>::value) {
-        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, this->numCols,
+        CHECK_CUSPARSE(cusparseCreateDnMat(matDescP, this->numRows, this->numCols, ld,
                         this->data, CUDA_R_64F, co));
     } 
     assertTypes3(DT, half, float, double);
@@ -189,8 +193,12 @@ bool DenseMatrix<DT, MT>::toOrdering(ORDERING newOrdering) {
 template <typename DT, typename MT>
 bool DenseMatrix<DT, MT>::save2File(std::string filePath) {
     using mt = MT;
-    assert(!this->onDevice);
-    assert(this->ordering == ORDERING::ROW_MAJOR);
+
+    DT* dataPtr = nullptr;
+    if (this->onDevice) {
+        cudaCheckError(cudaMallocHost(&dataPtr, this->numRows * this->numCols * sizeof(DT)));
+        cudaCheckError(cudaMemcpy(dataPtr, this->data, this->numRows * this->numCols * sizeof(DT), cudaMemcpyDeviceToHost));
+    }
 
     std::ofstream outputFile(filePath);
     if (!outputFile.is_open()) {
@@ -198,12 +206,26 @@ bool DenseMatrix<DT, MT>::save2File(std::string filePath) {
         return false;
     }
 
-    outputFile << this->numRows << ' ' << this->numCols << std::endl;
-    for (mt r = 0; r < this->numRows; r++) {
-        for (mt c = 0; c < this->numCols; c++) {
-            outputFile << this->data[r * this->numCols + c] << ' ';
+    if (this->ordering == ORDERING::ROW_MAJOR) {
+        outputFile << this->numRows << ' ' << this->numCols << std::endl;
+        for (mt r = 0; r < this->numRows; r++) {
+            for (mt c = 0; c < this->numCols; c++) {
+                outputFile << this->data[r * this->numCols + c] << ' ';
+            }
+            outputFile << std::endl;
         }
-        outputFile << std::endl;
+    } else {
+        outputFile << this->numRows << ' ' << this->numCols << " COL_MAJOR" << std::endl;
+        for (mt c = 0; c < this->numCols; c++) {
+            for (mt r = 0; r < this->numRows; r++) {
+                outputFile << dataPtr[ColMjIdx(r, c, this->numRows)] << ' ';
+            }
+            outputFile << std::endl;
+        }
+    }
+
+    if (this->onDevice) {
+        cudaCheckError(cudaFreeHost(dataPtr));
     }
 
     return true;

@@ -41,7 +41,7 @@ DenseMatrix<DT, MT> *spmmBSRCpu(SparseMatrixBSR<DT, MT> *ma, DenseMatrix<DT, MT>
     return mc;
 }
 
-template DenseMatrix<float, uint32_t> *
+template __attribute__((used)) DenseMatrix<float, uint32_t> *
 spmmBSRCpu<float, uint32_t, double>(SparseMatrixBSR<float, uint32_t> *ma, DenseMatrix<float, uint32_t> *mb, DenseMatrix<float, uint32_t>* mc);
 
 } // namespace cuspmm

@@ -24,6 +24,8 @@ __global__ void spmmELLK1(MT aNumRows, MT aNumCols, MT aNumNonZero, MT aMaxColNn
         int row = rowIdxs[idx];
         float value = aData[idx];
 
+        
+
         if (row>= 0) {
             for (int j = 0; j < bNumCols; j++) {
                 atomicAdd(&cData[row * bNumCols + j], value * bData[col * bNumCols + j]); 
@@ -61,6 +63,6 @@ DenseMatrix<DT, MT>* spmmELLWrapper1(SparseMatrixELL<DT, MT>* a, DenseMatrix<DT,
     return c;
 }
 
-template DenseMatrix<float, uint32_t>* spmmELLWrapper1<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c);
+template DenseMatrix<float, uint32_t>* spmmELLWrapper1<float, uint32_t, double>(SparseMatrixELL<float, uint32_t>* a, DenseMatrix<float, uint32_t>* b, DenseMatrix<float, uint32_t>* c) __attribute__((used));
 
 } // namespace cuspmm
